@@ -1,0 +1,801 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }}</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Inter, "Microsoft YaHei", system-ui, sans-serif;
+      --navy: #111c35;
+      --blue: #3568f5;
+      --blue-soft: #eef3ff;
+      --text: #172033;
+      --muted: #758098;
+      --border: #e7ebf3;
+      --canvas: #f5f7fb;
+      --green: #1f9d68;
+      --green-soft: #eaf8f1;
+      --orange: #c77c19;
+      --orange-soft: #fff6e6;
+      --red: #d04b56;
+      --red-soft: #fff0f1;
+      --shadow: 0 12px 32px rgba(30, 48, 86, .07);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: var(--text); background: var(--canvas); }
+    button, input, select { font: inherit; }
+    button { cursor: pointer; }
+    button:disabled { cursor: wait; opacity: .6; }
+    .shell { display: flex; min-height: 100vh; }
+    .sidebar { width: 246px; flex: 0 0 246px; display: flex; flex-direction: column; padding: 24px 14px 18px; color: #dce5ff; background: var(--navy); }
+    .brand { display: flex; align-items: center; gap: 11px; padding: 0 12px 28px; }
+    .brand-mark { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 10px; color: #fff; background: linear-gradient(135deg, #5c86ff, #3152c9); font-weight: 800; }
+    .brand-name { color: #fff; font-size: 16px; font-weight: 750; letter-spacing: .3px; }
+    .brand-subtitle { margin-top: 3px; color: #8494bb; font-size: 11px; }
+    .nav-label { padding: 0 13px 8px; color: #69799f; font-size: 11px; letter-spacing: 1.4px; }
+    .nav { display: grid; gap: 5px; }
+    .nav-item { display: flex; align-items: center; gap: 12px; width: 100%; padding: 11px 13px; border: 0; border-radius: 9px; color: #aab7d3; background: transparent; text-align: left; transition: .18s ease; }
+    .nav-item:hover { color: #fff; background: rgba(255,255,255,.07); }
+    .nav-item.active { color: #fff; background: var(--blue); box-shadow: 0 7px 18px rgba(53,104,245,.28); }
+    .nav-icon { width: 20px; color: currentColor; text-align: center; font-size: 15px; }
+    .sidebar-bottom { display: flex; align-items: center; gap: 8px; margin-top: auto; padding: 14px 12px 0; border-top: 1px solid rgba(255,255,255,.08); color: #8796ba; font-size: 12px; }
+    .connection-dot { width: 7px; height: 7px; border-radius: 50%; background: #48d991; box-shadow: 0 0 0 4px rgba(72,217,145,.12); }
+    .main { min-width: 0; flex: 1; padding: 28px 34px 48px; }
+    .topbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; max-width: 1440px; margin: 0 auto 27px; }
+    .eyebrow { margin: 0 0 6px; color: var(--blue); font-size: 11px; font-weight: 750; letter-spacing: 1.6px; }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { margin-bottom: 7px; font-size: 27px; letter-spacing: -.5px; }
+    h2 { margin-bottom: 0; font-size: 17px; }
+    .topbar-subtitle, .page-description { margin: 0; color: var(--muted); font-size: 13px; }
+    .top-actions { display: flex; align-items: center; gap: 9px; }
+    .last-refresh { margin-right: 8px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 36px; padding: 0 14px; border: 1px solid var(--border); border-radius: 8px; color: #536078; background: #fff; font-size: 13px; font-weight: 650; }
+    .btn:hover { border-color: #b9c6e1; background: #fbfcff; }
+    .btn-primary { border-color: var(--blue); color: #fff; background: var(--blue); box-shadow: 0 6px 14px rgba(53,104,245,.18); }
+    .btn-primary:hover { border-color: #2858df; background: #2858df; }
+    .btn-danger { border-color: #f0cdd0; color: var(--red); background: var(--red-soft); }
+    .btn-small { min-height: 30px; padding: 0 10px; font-size: 12px; }
+    .page { display: none; max-width: 1440px; margin: 0 auto; }
+    .page.active { display: block; }
+    .page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 20px; }
+    .page-head h2 { margin-bottom: 7px; font-size: 21px; }
+    .stats-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 15px; margin-bottom: 18px; }
+    .stat-card, .panel { border: 1px solid var(--border); border-radius: 12px; background: #fff; box-shadow: var(--shadow); }
+    .stat-card { padding: 18px 20px; }
+    .stat-label { color: var(--muted); font-size: 12px; font-weight: 650; }
+    .stat-value { display: block; margin: 10px 0 5px; color: var(--text); font-size: 28px; line-height: 1; letter-spacing: -.8px; }
+    .stat-detail { color: #99a3b6; font-size: 12px; }
+    .content-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(300px, .85fr); gap: 18px; margin-bottom: 18px; }
+    .content-grid.equal { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .panel { min-width: 0; padding: 20px; }
+    .panel-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 15px; }
+    .panel-title { margin: 0; font-size: 15px; }
+    .panel-hint { color: var(--muted); font-size: 12px; }
+    .table-wrap { overflow-x: auto; margin: 0 -4px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { padding: 10px 9px; border-bottom: 1px solid var(--border); color: #919bb0; font-size: 11px; font-weight: 700; text-align: left; white-space: nowrap; }
+    td { padding: 13px 9px; border-bottom: 1px solid #f0f2f6; color: #4b5870; vertical-align: middle; }
+    tr:last-child td { border-bottom: 0; }
+    .primary-text { color: var(--text); font-weight: 650; }
+    .secondary-text { margin-top: 3px; color: #99a3b6; font-size: 11px; }
+    .empty { padding: 28px 12px; color: #a0a9ba; text-align: center; }
+    .chip { display: inline-flex; align-items: center; min-height: 23px; padding: 0 8px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+    .chip-green { color: var(--green); background: var(--green-soft); }
+    .chip-blue { color: var(--blue); background: var(--blue-soft); }
+    .chip-orange { color: var(--orange); background: var(--orange-soft); }
+    .chip-red { color: var(--red); background: var(--red-soft); }
+    .chip-gray { color: #7d879a; background: #f0f2f6; }
+    .service-list { display: grid; gap: 13px; }
+    .service-item { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding-bottom: 13px; border-bottom: 1px solid #f0f2f6; }
+    .service-item:last-child { padding-bottom: 0; border-bottom: 0; }
+    .service-name { color: var(--text); font-size: 13px; font-weight: 650; }
+    .service-detail { margin-top: 4px; color: var(--muted); font-size: 11px; }
+    .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .form-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .field { display: grid; gap: 6px; }
+    .field.full { grid-column: 1 / -1; }
+    label { color: #65718a; font-size: 12px; font-weight: 650; }
+    input, select { width: 100%; height: 38px; padding: 0 11px; border: 1px solid #dfe4ee; border-radius: 7px; outline: none; color: var(--text); background: #fff; font-size: 13px; }
+    input:focus, select:focus { border-color: #7595f9; box-shadow: 0 0 0 3px rgba(53,104,245,.1); }
+    .form-actions { display: flex; align-items: center; gap: 9px; margin-top: 17px; }
+    .form-note { margin: 12px 0 0; color: var(--muted); font-size: 12px; line-height: 1.65; }
+    .login-layout { display: grid; grid-template-columns: minmax(190px, 235px) minmax(0, 1fr); gap: 22px; align-items: start; }
+    .login-state { display: grid; place-items: center; min-height: 176px; padding: 15px; border: 1px dashed #cdd6ea; border-radius: 10px; background: #fafbff; text-align: center; }
+    .login-state img { width: 168px; height: 168px; object-fit: contain; border-radius: 7px; background: #fff; }
+    .login-state-text { color: var(--muted); font-size: 12px; line-height: 1.6; }
+    .login-info { display: grid; gap: 12px; }
+    .detail-line { display: flex; align-items: center; justify-content: space-between; gap: 15px; padding-bottom: 11px; border-bottom: 1px solid #f0f2f6; font-size: 13px; }
+    .detail-line:last-child { border-bottom: 0; }
+    .detail-label { color: var(--muted); }
+    .detail-value { color: var(--text); font-weight: 650; text-align: right; }
+    details { margin-top: 17px; border-top: 1px solid var(--border); padding-top: 15px; }
+    summary { cursor: pointer; color: #536078; font-size: 13px; font-weight: 650; }
+    .notice { display: none; max-width: 1440px; margin: -8px auto 18px; padding: 11px 14px; border: 1px solid #cfe0ff; border-radius: 8px; color: #3159af; background: #f0f5ff; font-size: 13px; }
+    .notice.show { display: block; }
+    .notice.error { border-color: #f2ced2; color: #b33e49; background: var(--red-soft); }
+    .notice.success { border-color: #c8ebd9; color: #237b57; background: var(--green-soft); }
+    .info-box { padding: 14px 15px; border: 1px solid #dbe5ff; border-radius: 9px; color: #53678f; background: #f5f8ff; font-size: 13px; line-height: 1.7; }
+    .binding-card { margin-top: 18px; padding: 16px; border: 1px solid #cfe0ff; border-radius: 10px; background: #f7f9ff; text-align: center; }
+    .binding-code-label { color: #53678f; font-size: 12px; }
+    .binding-code { margin: 8px 0 3px; color: var(--blue); font-size: 28px; font-weight: 800; letter-spacing: 5px; }
+    .binding-countdown { color: var(--orange); font-size: 12px; font-weight: 650; }
+    .binding-card .form-note { margin: 9px 0 12px; text-align: left; }
+    @media (max-width: 1050px) {
+      .sidebar { width: 210px; flex-basis: 210px; }
+      .main { padding: 24px 22px 40px; }
+      .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .content-grid, .content-grid.equal { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 720px) {
+      .shell { display: block; }
+      .sidebar { width: 100%; min-height: auto; padding: 14px; }
+      .brand { padding-bottom: 14px; }
+      .nav { display: flex; overflow-x: auto; }
+      .nav-label, .sidebar-bottom { display: none; }
+      .nav-item { width: auto; flex: 0 0 auto; white-space: nowrap; }
+      .main { padding: 20px 14px 34px; }
+      .topbar, .page-head { display: block; }
+      .top-actions { margin-top: 16px; }
+      .last-refresh { margin-right: auto; }
+      .form-grid, .form-grid.three, .login-layout { grid-template-columns: 1fr; }
+      .stats-grid { gap: 10px; }
+      .stat-card { padding: 15px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">Y</div>
+        <div><div class="brand-name">资讯监控中心</div><div class="brand-subtitle">YYSLS NEWS CENTER</div></div>
+      </div>
+      <div class="nav-label">工作台</div>
+      <nav class="nav" aria-label="后台导航">
+        <button class="nav-item active" data-page="overview" type="button"><span class="nav-icon">⌂</span>系统总览</button>
+        <button class="nav-item" data-page="bilibili" type="button"><span class="nav-icon">◉</span>B站监控</button>
+        <button class="nav-item" data-page="yysls" type="button"><span class="nav-icon">▣</span>官网来源</button>
+        <button class="nav-item" data-page="qqbot" type="button"><span class="nav-icon">✦</span>QQBot 配置</button>
+        <button class="nav-item" data-page="targets" type="button"><span class="nav-icon">◎</span>推送目标</button>
+        <button class="nav-item" data-page="settings" type="button"><span class="nav-icon">⚙</span>系统设置</button>
+      </nav>
+      <div class="sidebar-bottom"><span class="connection-dot"></span><span>管理服务已连接</span></div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div><p class="eyebrow">YYSLS NEWS CENTER</p><h1 id="page-title">系统总览</h1><p class="topbar-subtitle" id="page-subtitle">查看采集来源、登录状态和推送队列。</p></div>
+        <div class="top-actions"><span class="last-refresh" id="last-refresh">尚未刷新</span><button class="btn" id="refresh-button" type="button">↻ 刷新</button><button class="btn btn-primary" id="poll-button" type="button">立即轮询</button></div>
+      </header>
+      <div class="notice" id="notice" role="status"></div>
+
+      <section class="page active" id="page-overview">
+        <div class="stats-grid">
+          <div class="stat-card"><span class="stat-label">启用中的监控源</span><strong class="stat-value" id="stat-sources">--</strong><span class="stat-detail" id="stat-sources-detail">B站 UP 主和官网来源</span></div>
+          <div class="stat-card"><span class="stat-label">已采集内容</span><strong class="stat-value" id="stat-contents">--</strong><span class="stat-detail">最近内容会显示在下方</span></div>
+          <div class="stat-card"><span class="stat-label">待处理推送</span><strong class="stat-value" id="stat-pending">--</strong><span class="stat-detail" id="stat-pending-detail">待发送和待重试</span></div>
+          <div class="stat-card"><span class="stat-label">系统状态</span><strong class="stat-value" id="stat-status">--</strong><span class="stat-detail" id="stat-status-detail">服务和凭据状态</span></div>
+        </div>
+        <div class="content-grid">
+          <section class="panel"><div class="panel-header"><h2 class="panel-title">来源运行状态</h2><span class="panel-hint">按最近一次轮询展示</span></div><div class="table-wrap"><table><thead><tr><th>来源</th><th>类型</th><th>状态</th><th>下次轮询</th><th>最近成功</th></tr></thead><tbody id="source-table"></tbody></table></div></section>
+          <section class="panel"><div class="panel-header"><h2 class="panel-title">服务状态</h2><span class="panel-hint">实时配置摘要</span></div><div class="service-list" id="service-list"></div></section>
+        </div>
+        <section class="panel"><div class="panel-header"><h2 class="panel-title">最近采集内容</h2><span class="panel-hint">仅展示最近 20 条</span></div><div class="table-wrap"><table><thead><tr><th>标题</th><th>来源</th><th>分类</th><th>采集时间</th><th>原文</th></tr></thead><tbody id="recent-table"></tbody></table></div></section>
+      </section>
+
+      <section class="page" id="page-bilibili">
+        <div class="content-grid equal">
+          <section class="panel">
+            <div class="panel-header"><h2 class="panel-title">B站账号登录</h2><span class="chip chip-gray" id="bili-login-chip">未配置</span></div>
+            <div class="login-layout">
+              <div class="login-state"><img id="qr" alt="B站登录二维码" hidden><div class="login-state-text" id="qr-placeholder">点击“生成二维码”后在这里显示</div></div>
+              <div class="login-info">
+                <div class="detail-line"><span class="detail-label">当前状态</span><span class="detail-value" id="bili-login-status">未配置</span></div>
+                <div class="detail-line"><span class="detail-label">当前账号</span><span class="detail-value" id="bili-login-username">--</span></div>
+                <div class="detail-line"><span class="detail-label">最后更新</span><span class="detail-value" id="bili-login-updated">--</span></div>
+                <div class="detail-line"><span class="detail-label">凭据内容</span><span class="detail-value" id="bili-login-masked">--</span></div>
+                <div class="form-actions"><button class="btn btn-primary" id="start-login-button" type="button">生成二维码</button><button class="btn" id="poll-login-button" type="button" disabled>立即检查</button></div>
+                <p class="form-note" id="login-message">扫码成功后凭据会加密保存，不会显示完整 Cookie。</p>
+              </div>
+            </div>
+            <details><summary>备用：手动录入 Cookie</summary><form id="cookie-form"><div class="form-grid" style="margin-top:15px"><div class="field"><label for="sessdata">SESSDATA</label><input id="sessdata" type="password" required></div><div class="field"><label for="bili-jct">bili_jct</label><input id="bili-jct" type="password" required></div><div class="field"><label for="dedeuserid">DedeUserID</label><input id="dedeuserid" required></div><div class="field"><label for="buvid3">buvid3（可选）</label><input id="buvid3"></div><div class="field"><label for="buvid4">buvid4（可选）</label><input id="buvid4"></div><div class="field"><label for="ac-time-value">ac_time_value（可选）</label><input id="ac-time-value" type="password"></div></div><div class="form-actions"><button class="btn btn-primary" type="submit">保存 Cookie</button></div></form></details>
+          </section>
+          <section class="panel">
+            <div class="panel-header"><h2 class="panel-title">添加或更新 UP 主</h2><span class="panel-hint">最短轮询间隔 60 秒</span></div>
+            <form id="bili-form"><div class="form-grid"><div class="field"><label for="uid">UID</label><input id="uid" type="number" min="1" required placeholder="例如 123456"></div><div class="field"><label for="display-name">显示名称</label><input id="display-name" placeholder="留空自动获取 B站昵称"></div><div class="field"><label for="bili-interval">轮询间隔（秒）</label><input id="bili-interval" type="number" min="60" value="300" required></div><div class="field"><label for="filter-types">动态类型过滤</label><input id="filter-types" placeholder="逗号分隔，可选"></div><div class="field full"><label for="filter-keywords">关键词过滤</label><input id="filter-keywords" placeholder="逗号分隔，可选"></div></div><div class="form-actions"><button class="btn btn-primary" type="submit">保存订阅</button></div></form>
+            <div class="info-box" style="margin-top:20px">首次添加 UP 主时只建立当前动态基线，不会把历史动态一次性推送出来。</div>
+          </section>
+        </div>
+        <section class="panel"><div class="panel-header"><h2 class="panel-title">已配置的 UP 主</h2><span class="panel-hint">支持按 UID 更新</span></div><div class="table-wrap"><table><thead><tr><th>UP 主</th><th>UID</th><th>状态</th><th>轮询间隔</th><th>最近成功</th><th>最近错误</th><th></th></tr></thead><tbody id="bili-table"></tbody></table></div></section>
+      </section>
+
+      <section class="page" id="page-yysls">
+        <section class="panel" style="margin-bottom:18px"><div class="panel-header"><h2 class="panel-title">添加或更新来源</h2><span class="panel-hint">详情页优先截取 #NIE-art</span></div><form id="source-form"><div class="form-grid three"><div class="field"><label for="source-key">来源标识</label><input id="source-key" value="official" required></div><div class="field"><label for="source-name">来源名称</label><input id="source-name" value="燕云十六声官网新闻" required></div><div class="field"><label for="source-category">分类</label><input id="source-category" value="最新"></div><div class="field full"><label for="source-url">新闻列表 URL</label><input id="source-url" value="https://www.yysls.cn/news/" type="url" required></div><div class="field"><label for="source-interval">轮询间隔（秒）</label><input id="source-interval" type="number" min="60" value="600" required></div></div><div class="form-actions"><button class="btn btn-primary" type="submit">保存来源</button></div></form></section>
+        <section class="panel"><div class="panel-header"><h2 class="panel-title">来源列表</h2><span class="panel-hint">状态和错误会显示在这里</span></div><div class="table-wrap"><table><thead><tr><th>来源</th><th>分类</th><th>状态</th><th>轮询间隔</th><th>下次轮询</th><th>最近错误</th></tr></thead><tbody id="yysls-table"></tbody></table></div></section>
+      </section>
+
+      <section class="page" id="page-qqbot">
+        <div class="content-grid equal">
+          <section class="panel"><div class="panel-header"><h2 class="panel-title">应用配置</h2><span class="chip chip-gray" id="qq-config-chip">未配置</span></div><form id="qq-form"><div class="form-grid"><div class="field"><label for="app-id">AppID</label><input id="app-id" required></div><div class="field"><label for="app-secret">AppSecret</label><input id="app-secret" type="password" placeholder="留空则保留已保存的 Secret"></div><div class="field full"><label for="qq-base-url">API 地址</label><input id="qq-base-url" value="https://api.bot.qq.com" type="url"></div></div><div class="form-actions"><button class="btn btn-primary" type="submit">保存 QQBot 配置</button></div></form><p class="form-note" id="qq-config-detail">--</p></section>
+          <section class="panel"><div class="panel-header"><h2 class="panel-title">发送测试</h2><span class="panel-hint">仅发送文本测试消息</span></div><form id="qq-test-form"><div class="form-grid"><div class="field"><label for="test-scene">目标类型</label><select id="test-scene"><option value="group">群聊</option><option value="user">单聊</option></select></div><div class="field"><label for="test-openid">已绑定目标</label><select id="test-openid" required><option value="">正在加载目标...</option></select></div><div class="field full"><label for="test-content">测试内容</label><input id="test-content" value="yysls-news 测试消息" maxlength="2000"></div></div><p class="form-note" id="qq-test-target-note">目标来自“推送目标”页面的已绑定记录。</p><div class="form-actions"><button class="btn" id="qq-test-submit" type="submit">发送测试消息</button></div></form></section>
+        </div>
+      </section>
+
+      <section class="page" id="page-targets">
+        <div class="content-grid equal">
+          <section class="panel">
+            <div class="panel-header"><h2 class="panel-title">自动绑定目标</h2><span class="chip chip-gray" id="qq-listener-chip">未启动</span></div>
+            <p class="form-note" id="qq-listener-detail">启动完整服务后，监听 QQ 单聊和群聊 @ 事件。</p>
+            <form id="binding-form">
+              <div class="form-grid">
+                <div class="field"><label for="binding-scene">绑定场景</label><select id="binding-scene"><option value="group">群聊（@机器人发送）</option><option value="user">单聊（直接发送）</option></select></div>
+                <div class="field"><label for="binding-message-mode">消息模式</label><select id="binding-message-mode"><option value="image">图片（推荐）</option><option value="markdown">Markdown</option><option value="text">文本</option></select></div>
+              </div>
+              <div class="form-actions"><button class="btn btn-primary" type="submit">生成绑定码</button></div>
+            </form>
+            <div class="binding-card" id="binding-card" hidden>
+              <div class="binding-code-label">请发送以下 8 位绑定码</div>
+              <div class="binding-code" id="binding-code">--------</div>
+              <div class="binding-countdown" id="binding-expires">有效期 3 分钟</div>
+              <p class="form-note" id="binding-message">请在目标 QQ 单聊中直接发送，或在目标群 @机器人后发送。</p>
+              <button class="btn btn-small" id="binding-cancel-button" type="button">取消绑定码</button>
+            </div>
+          </section>
+          <section class="panel">
+            <div class="panel-header"><h2 class="panel-title">手动新增或更新目标</h2><span class="panel-hint">同一场景和 OpenID 会自动更新</span></div>
+            <form id="target-form"><div class="form-grid"><div class="field"><label for="scene">目标类型</label><select id="scene"><option value="group">群聊 group_openid</option><option value="user">单聊 user_openid</option></select></div><div class="field"><label for="openid">OpenID</label><input id="openid" required></div><div class="field full"><label for="message-mode">消息模式</label><select id="message-mode"><option value="image">图片（推荐）</option><option value="markdown">Markdown</option><option value="text">文本</option></select></div></div><div class="form-actions"><button class="btn" type="submit">保存推送目标</button></div></form>
+            <div class="info-box" style="margin-top:20px">自动绑定成功后，OpenID 会直接写入下方目标列表；绑定码只显示原文一次，3 分钟后自动失效。</div>
+          </section>
+        </div>
+        <section class="panel"><div class="panel-header"><h2 class="panel-title">目标列表</h2><span class="panel-hint">图片模式统一使用 Playwright</span></div><div class="table-wrap"><table><thead><tr><th>类型</th><th>OpenID</th><th>消息模式</th><th>状态</th><th>更新时间</th></tr></thead><tbody id="target-table"></tbody></table></div></section>
+      </section>
+
+      <section class="page" id="page-settings">
+        <div class="content-grid equal">
+          <section class="panel"><div class="panel-header"><h2 class="panel-title">默认轮询周期</h2><span class="panel-hint">单来源配置可单独覆盖</span></div><form id="poll-form"><div class="form-grid"><div class="field"><label for="default-bili-interval">B站默认间隔（秒）</label><input id="default-bili-interval" type="number" min="60" value="300" required></div><div class="field"><label for="default-yysls-interval">官网默认间隔（秒）</label><input id="default-yysls-interval" type="number" min="60" value="600" required></div></div><div class="form-actions"><button class="btn btn-primary" type="submit">保存轮询设置</button></div></form></section>
+          <section class="panel"><div class="panel-header"><h2 class="panel-title">图片渲染策略</h2><span class="chip chip-blue">Playwright</span></div><div class="info-box">B站使用本地 HTML 模板截图；官网优先打开详情页并截取 <code>#NIE-art</code>。两者统一使用 Playwright，浏览器只在处理推送图片时按需启动。</div><div class="service-list" style="margin-top:18px"><div class="service-item"><div><div class="service-name">B站渲染</div><div class="service-detail">结构化 API 数据 + 本地模板</div></div><span class="chip chip-green">已启用</span></div><div class="service-item"><div><div class="service-name">官网渲染</div><div class="service-detail">原始 #NIE-art 容器</div></div><span class="chip chip-green">已启用</span></div></div></section>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script>
+    var dashboardState = null;
+    var loginSession = '';
+    var loginPollTimer = null;
+    var loginPollInFlight = false;
+    var loginPollIntervalMs = 2000;
+    var activeBindingId = null;
+    var bindingPollTimer = null;
+    var bindingPollInFlight = false;
+    var pageMeta = {
+      overview: ['系统总览', '查看采集来源、登录状态和推送队列。'],
+      bilibili: ['B站监控', '配置扫码登录、UP 主订阅和动态过滤规则。'],
+      yysls: ['官网来源', '配置燕云十六声官网新闻列表来源和轮询周期。'],
+      qqbot: ['QQBot 配置', '配置官方 Bot API v2 凭据和发送测试。'],
+      targets: ['推送目标', '配置图片、Markdown 或文本消息的接收目标。'],
+      settings: ['系统设置', '调整默认轮询周期和图片渲染策略。']
+    };
+    var statusLabels = {
+      logged_in: '已登录', not_configured: '未配置', waiting_scan: '等待扫码',
+      expired: '二维码已过期', relogin_required: '需要重新登录', refreshing: '刷新中', failed: '异常',
+      pending: '待发送', retry: '待重试', processing: '处理中', sent: '已发送',
+      bound: '已绑定', cancelled: '已取消', connected: '监听中', not_started: '未启动',
+      stopped: '已停止', error: '异常'
+    };
+
+    function escapeHtml(value) {
+      return String(value == null ? '' : value).replace(/[&<>"']/g, function(character) {
+        return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[character];
+      });
+    }
+    function formatDate(value) {
+      if (!value) return '--';
+      var date = new Date(value);
+      return isNaN(date.getTime()) ? escapeHtml(value) : date.toLocaleString('zh-CN', {hour12: false});
+    }
+    function formatInterval(value) {
+      var seconds = Number(value || 0);
+      if (seconds >= 3600) return Math.round(seconds / 3600) + ' 小时';
+      return Math.round(seconds / 60) + ' 分钟';
+    }
+    function label(value) { return statusLabels[value] || value || '--'; }
+    function statusTone(value) {
+      if (['logged_in', 'sent', 'bound', 'connected'].indexOf(value) >= 0) return 'green';
+      if (['pending', 'retry', 'waiting_scan', 'expired', 'refreshing', 'not_started', 'stopped'].indexOf(value) >= 0) return 'orange';
+      if (['failed', 'relogin_required', 'error'].indexOf(value) >= 0) return 'red';
+      return 'gray';
+    }
+    function chip(value, tone) {
+      return '<span class="chip chip-' + (tone || 'gray') + '">' + escapeHtml(label(value)) + '</span>';
+    }
+    function emptyRow(columns, message) {
+      return '<tr><td class="empty" colspan="' + columns + '">' + (message || '暂无数据') + '</td></tr>';
+    }
+    function setNotice(message, type) {
+      var element = document.querySelector('#notice');
+      element.textContent = message || '';
+      element.className = 'notice ' + (message ? 'show ' + (type || '') : '');
+      if (message) window.setTimeout(function() { element.className = 'notice'; }, 5000);
+    }
+    function showPage(page) {
+      document.querySelectorAll('.nav-item').forEach(function(item) {
+        item.classList.toggle('active', item.dataset.page === page);
+      });
+      document.querySelectorAll('.page').forEach(function(item) {
+        item.classList.toggle('active', item.id === 'page-' + page);
+      });
+      document.querySelector('#page-title').textContent = pageMeta[page][0];
+      document.querySelector('#page-subtitle').textContent = pageMeta[page][1];
+    }
+    async function api(url, options) {
+      var requestOptions = options || {};
+      requestOptions.headers = Object.assign({'Content-Type': 'application/json'}, requestOptions.headers || {});
+      var response = await fetch(url, requestOptions);
+      var text = await response.text();
+      var data = {};
+      try { data = text ? JSON.parse(text) : {}; } catch (_) { data = {detail: text}; }
+      if (!response.ok) throw new Error(data.detail || ('请求失败（HTTP ' + response.status + '）'));
+      return data;
+    }
+    function renderLoginStatus(credential) {
+      var status = credential.status || 'not_configured';
+      var chipElement = document.querySelector('#bili-login-chip');
+      chipElement.className = 'chip chip-' + statusTone(status);
+      chipElement.textContent = label(status);
+      document.querySelector('#bili-login-status').textContent = label(status);
+      document.querySelector('#bili-login-username').textContent = credential.username || '--';
+      document.querySelector('#bili-login-updated').textContent = formatDate(credential.updated_at);
+      var maskedCount = Object.keys(credential.masked || {}).length;
+      document.querySelector('#bili-login-masked').textContent = maskedCount ? maskedCount + ' 个字段已脱敏' : '暂无凭据';
+      document.querySelector('#start-login-button').textContent = status === 'logged_in' ? '切换账号' : '生成二维码';
+      document.querySelector('#poll-login-button').disabled = !loginSession;
+      if (credential.last_error) {
+        document.querySelector('#login-message').textContent = credential.last_error;
+      } else if (!loginSession && status === 'logged_in') {
+        var username = credential.username ? '：' + credential.username : '';
+        document.querySelector('#login-message').textContent = 'B站账号已登录' + username + '，如需切换账号请重新生成二维码。';
+        document.querySelector('#qr-placeholder').textContent = '当前账号已登录，无需扫码';
+      }
+    }
+    function renderOverview(data) {
+      var subscriptions = data.subscriptions || [];
+      var sources = data.sources || [];
+      var contents = data.recent_contents || [];
+      var counts = data.delivery_counts || {};
+      var enabledBili = subscriptions.filter(function(item) { return item.enabled; }).length;
+      var enabledSources = sources.filter(function(item) { return item.enabled; }).length;
+      var pending = Number(counts.pending || 0) + Number(counts.retry || 0);
+      document.querySelector('#stat-sources').textContent = enabledBili + enabledSources;
+      document.querySelector('#stat-sources-detail').textContent = 'B站 ' + enabledBili + ' 个 · 官网 ' + enabledSources + ' 个';
+      document.querySelector('#stat-contents').textContent = contents.length;
+      document.querySelector('#stat-pending').textContent = pending;
+      document.querySelector('#stat-pending-detail').textContent = '待发送 ' + (counts.pending || 0) + ' · 待重试 ' + (counts.retry || 0);
+      var credentialStatus = data.credential && data.credential.status || 'not_configured';
+      var systemReady = data.qqbot && data.qqbot.configured && ['logged_in', 'not_configured'].indexOf(credentialStatus) >= 0;
+      document.querySelector('#stat-status').textContent = systemReady ? '正常' : '待配置';
+      document.querySelector('#stat-status-detail').textContent = data.qqbot && data.qqbot.configured ? 'QQBot 已配置 · B站' + label(credentialStatus) : '请先配置 QQBot';
+      renderLoginStatus(data.credential || {});
+
+      var sourceRows = [];
+      subscriptions.forEach(function(item) {
+        sourceRows.push('<tr><td><div class="primary-text">' + escapeHtml(item.display_name || item.uid) + '</div><div class="secondary-text">UID ' + escapeHtml(item.uid) + '</div></td><td>B站</td><td>' + chip(item.enabled ? 'logged_in' : 'not_configured', item.enabled ? 'green' : 'gray') + '</td><td>' + formatDate(item.next_poll_at) + '</td><td>' + formatDate(item.last_success_at) + '</td></tr>');
+      });
+      sources.forEach(function(item) {
+        sourceRows.push('<tr><td><div class="primary-text">' + escapeHtml(item.name) + '</div><div class="secondary-text">' + escapeHtml(item.url) + '</div></td><td>官网</td><td>' + chip(item.enabled ? 'logged_in' : 'not_configured', item.enabled ? 'green' : 'gray') + '</td><td>' + formatDate(item.next_poll_at) + '</td><td>' + formatDate(item.last_success_at) + '</td></tr>');
+      });
+      document.querySelector('#source-table').innerHTML = sourceRows.length ? sourceRows.join('') : emptyRow(5);
+
+      document.querySelector('#service-list').innerHTML =
+        '<div class="service-item"><div><div class="service-name">B站登录</div><div class="service-detail">扫码 Credential 生命周期</div></div>' + chip(credentialStatus, statusTone(credentialStatus)) + '</div>' +
+        '<div class="service-item"><div><div class="service-name">QQBot</div><div class="service-detail">官方 API v2 鉴权</div></div>' + chip(data.qqbot && data.qqbot.configured ? 'logged_in' : 'not_configured', data.qqbot && data.qqbot.configured ? 'green' : 'orange') + '</div>' +
+        '<div class="service-item"><div><div class="service-name">图片渲染</div><div class="service-detail">本地模板 / 官网容器</div></div><span class="chip chip-blue">Playwright</span></div>' +
+        '<div class="service-item"><div><div class="service-name">推送队列</div><div class="service-detail">已发送 ' + (counts.sent || 0) + ' · 失败 ' + (counts.failed || 0) + '</div></div>' + chip(pending ? 'pending' : 'sent', pending ? 'orange' : 'green') + '</div>';
+
+      document.querySelector('#recent-table').innerHTML = contents.length ? contents.map(function(item) {
+        var link = escapeHtml(item.source_url || '#');
+        return '<tr><td><div class="primary-text">' + escapeHtml(item.title || '未命名内容') + '</div><div class="secondary-text">' + escapeHtml(item.author || '') + '</div></td><td>' + escapeHtml(item.source_type === 'bilibili' ? 'B站' : '燕云官网') + '</td><td>' + escapeHtml(item.category || '--') + '</td><td>' + formatDate(item.created_at) + '</td><td><a href="' + link + '" target="_blank" rel="noreferrer">打开</a></td></tr>';
+      }).join('') : emptyRow(5);
+    }
+    function renderSubscriptions(items) {
+      document.querySelector('#bili-table').innerHTML = items.length ? items.map(function(item) {
+        return '<tr><td><div class="primary-text">' + escapeHtml(item.display_name || item.uid) + '</div><div class="secondary-text">' + escapeHtml((item.filter_types || []).join('、') || '未设置类型过滤') + '</div></td><td>' + escapeHtml(item.uid) + '</td><td>' + chip(item.enabled ? 'logged_in' : 'not_configured', item.enabled ? 'green' : 'gray') + '</td><td>' + formatInterval(item.poll_interval_seconds) + '</td><td>' + formatDate(item.last_success_at) + '</td><td>' + escapeHtml(item.last_error || '--') + '</td><td><button class="btn btn-small btn-danger" type="button" data-delete-uid="' + escapeHtml(item.uid) + '">删除</button></td></tr>';
+      }).join('') : emptyRow(7, '还没有配置 UP 主');
+      document.querySelectorAll('[data-delete-uid]').forEach(function(button) {
+        button.addEventListener('click', function() { deleteSubscription(button.dataset.deleteUid); });
+      });
+    }
+    function renderSources(items) {
+      document.querySelector('#yysls-table').innerHTML = items.length ? items.map(function(item) {
+        return '<tr><td><div class="primary-text">' + escapeHtml(item.name) + '</div><div class="secondary-text">' + escapeHtml(item.source_key) + '</div></td><td>' + escapeHtml(item.category || '--') + '</td><td>' + chip(item.enabled ? 'logged_in' : 'not_configured', item.enabled ? 'green' : 'gray') + '</td><td>' + formatInterval(item.poll_interval_seconds) + '</td><td>' + formatDate(item.next_poll_at) + '</td><td>' + escapeHtml(item.last_error || '--') + '</td></tr>';
+      }).join('') : emptyRow(6, '还没有配置官网来源');
+    }
+    function renderTargets(items) {
+      var modeLabels = {image: '图片', markdown: 'Markdown', text: '文本'};
+      document.querySelector('#target-table').innerHTML = items.length ? items.map(function(item) {
+        return '<tr><td>' + escapeHtml(item.scene_type === 'group' ? '群聊' : '单聊') + '</td><td>' + escapeHtml(maskOpenId(item.target_openid)) + '</td><td>' + escapeHtml(modeLabels[item.message_mode] || item.message_mode) + '</td><td>' + chip(item.enabled ? 'logged_in' : 'not_configured', item.enabled ? 'green' : 'gray') + '</td><td>' + formatDate(item.updated_at) + '</td></tr>';
+      }).join('') : emptyRow(5, '还没有配置推送目标');
+    }
+    function renderTestTargets(items) {
+      var sceneType = document.querySelector('#test-scene').value;
+      var select = document.querySelector('#test-openid');
+      var note = document.querySelector('#qq-test-target-note');
+      var previousValue = select.value;
+      var targets = (items || []).filter(function(item) {
+        return item.enabled && item.scene_type === sceneType;
+      });
+      select.innerHTML = '';
+      if (!targets.length) {
+        var emptyOption = document.createElement('option');
+        emptyOption.value = '';
+        emptyOption.textContent = sceneType === 'group' ? '暂无已绑定群聊' : '暂无已绑定单聊';
+        select.appendChild(emptyOption);
+        select.disabled = true;
+        note.textContent = sceneType === 'group'
+          ? '暂无已绑定群聊，请先在“推送目标”页面生成绑定码。'
+          : '暂无已绑定单聊，请先在“推送目标”页面生成绑定码。';
+        return;
+      }
+      targets.forEach(function(item) {
+        var option = document.createElement('option');
+        option.value = item.target_openid;
+        option.textContent = (sceneType === 'group' ? '群聊' : '单聊') + ' · ' + maskOpenId(item.target_openid);
+        select.appendChild(option);
+      });
+      select.disabled = false;
+      select.value = targets.some(function(item) { return item.target_openid === previousValue; })
+        ? previousValue
+        : targets[0].target_openid;
+      note.textContent = '目标来自“推送目标”页面的已绑定记录，实际发送使用完整 OpenID。';
+    }
+    function maskOpenId(value) {
+      var text = String(value || '');
+      return text.length > 10 ? text.slice(0, 5) + '...' + text.slice(-4) : text;
+    }
+    function fillConfig(data) {
+      var qq = data.qqbot || {};
+      document.querySelector('#app-id').value = qq.app_id || '';
+      document.querySelector('#qq-base-url').value = qq.base_url || 'https://api.bot.qq.com';
+      var qqChip = document.querySelector('#qq-config-chip');
+      qqChip.className = 'chip chip-' + (qq.configured ? 'green' : 'orange');
+      qqChip.textContent = qq.configured ? '已配置' : '未配置';
+      document.querySelector('#qq-config-detail').textContent = qq.configured ? 'Secret：' + (qq.app_secret || '已脱敏') + '；当前使用官方 API v2。' : '尚未配置 AppID/AppSecret。';
+      var poll = data.poll_defaults || {};
+      document.querySelector('#default-bili-interval').value = poll.bilibili_poll_interval_seconds || 300;
+      document.querySelector('#default-yysls-interval').value = poll.yysls_poll_interval_seconds || 600;
+      var listener = data.qq_listener || {};
+      var listenerStatus = listener.status || 'not_started';
+      var listenerChip = document.querySelector('#qq-listener-chip');
+      listenerChip.className = 'chip chip-' + statusTone(listenerStatus);
+      listenerChip.textContent = label(listenerStatus);
+      var listenerDetail = listenerStatus === 'connected'
+        ? 'QQ Gateway 已连接，发送绑定码即可自动识别目标。'
+        : (listener.last_error || '启动完整服务后，监听 QQ 单聊和群聊 @ 事件。');
+      document.querySelector('#qq-listener-detail').textContent = listenerDetail;
+    }
+    async function refreshDashboard(showMessage) {
+      try {
+        dashboardState = await api('/api/dashboard');
+        renderOverview(dashboardState);
+        renderSubscriptions(dashboardState.subscriptions || []);
+        renderSources((dashboardState.sources || []).filter(function(item) { return item.source_type === 'yysls'; }));
+        var targets = dashboardState.targets || [];
+        renderTargets(targets);
+        renderTestTargets(targets);
+        fillConfig(dashboardState);
+        document.querySelector('#last-refresh').textContent = '刷新于 ' + new Date().toLocaleTimeString('zh-CN', {hour12: false});
+        if (showMessage) setNotice('数据已刷新。', 'success');
+      } catch (error) { setNotice(error.message, 'error'); }
+    }
+    async function startLogin() {
+      stopLoginPolling();
+      loginSession = '';
+      document.querySelector('#qr').hidden = true;
+      document.querySelector('#qr-placeholder').hidden = false;
+      document.querySelector('#qr-placeholder').textContent = '正在生成二维码...';
+      try {
+        var data = await api('/api/bilibili/login/start', {method: 'POST'});
+        loginSession = data.session_id;
+        document.querySelector('#qr').src = data.image_data_url;
+        document.querySelector('#qr').hidden = false;
+        document.querySelector('#qr-placeholder').hidden = true;
+        document.querySelector('#poll-login-button').disabled = false;
+        document.querySelector('#login-message').textContent = '请使用 B站 App 扫码，系统每 2 秒自动检查状态。';
+        loginPollTimer = window.setInterval(function() { pollLogin(true); }, loginPollIntervalMs);
+        setNotice('二维码已生成，请使用 B站 App 扫码。', 'success');
+      } catch (error) {
+        document.querySelector('#qr-placeholder').textContent = '二维码生成失败，请重试';
+        document.querySelector('#login-message').textContent = error.message;
+        setNotice(error.message, 'error');
+      }
+    }
+    function stopLoginPolling() {
+      if (loginPollTimer) {
+        window.clearInterval(loginPollTimer);
+        loginPollTimer = null;
+      }
+      document.querySelector('#poll-login-button').disabled = true;
+    }
+    async function pollLogin(manual) {
+      if (!loginSession) { if (manual) setNotice('请先生成二维码。', 'error'); return; }
+      if (loginPollInFlight) return;
+      loginPollInFlight = true;
+      var requestSession = loginSession;
+      try {
+        var data = await api('/api/bilibili/login/poll', {method: 'POST', body: JSON.stringify({session_id: requestSession})});
+        if (requestSession !== loginSession) return;
+        document.querySelector('#login-message').textContent = data.message || label(data.status);
+        if (data.status === 'logged_in') {
+          stopLoginPolling();
+          loginSession = '';
+          document.querySelector('#qr').hidden = true;
+          document.querySelector('#qr-placeholder').hidden = false;
+          document.querySelector('#qr-placeholder').textContent = data.username ? '已登录：' + data.username : '登录成功，二维码会话已结束';
+          setNotice(data.username ? 'B站登录成功，当前账号：' + data.username : 'B站登录成功，Credential 已加密保存。', 'success');
+        } else if (data.status === 'expired') {
+          stopLoginPolling();
+          loginSession = '';
+          document.querySelector('#qr').hidden = true;
+          document.querySelector('#qr-placeholder').hidden = false;
+          document.querySelector('#qr-placeholder').textContent = '二维码已过期，请重新生成';
+          setNotice('B站二维码已过期，请重新生成。', 'error');
+        } else {
+          if (manual) setNotice(data.message || label(data.status), '');
+        }
+        if (data.status === 'logged_in') await refreshDashboard();
+      } catch (error) {
+        if (requestSession !== loginSession) return;
+        document.querySelector('#login-message').textContent = '自动检查失败：' + error.message + '，系统将继续重试。';
+        if (manual) setNotice(error.message, 'error');
+        if (/会话不存在|已过期/.test(error.message)) {
+          stopLoginPolling();
+          loginSession = '';
+        }
+      } finally {
+        loginPollInFlight = false;
+      }
+    }
+    async function saveCookie(event) {
+      event.preventDefault();
+      try {
+        await api('/api/bilibili/login/cookie', {method: 'POST', body: JSON.stringify({
+          sessdata: document.querySelector('#sessdata').value,
+          bili_jct: document.querySelector('#bili-jct').value,
+          dedeuserid: document.querySelector('#dedeuserid').value,
+          buvid3: document.querySelector('#buvid3').value,
+          buvid4: document.querySelector('#buvid4').value,
+          ac_time_value: document.querySelector('#ac-time-value').value
+        })});
+        event.target.reset();
+        setNotice('Cookie 已加密保存。', 'success');
+        await refreshDashboard();
+      } catch (error) { setNotice(error.message, 'error'); }
+    }
+    async function saveSubscription(event) {
+      event.preventDefault();
+      try {
+        await api('/api/bilibili/subscriptions', {method: 'POST', body: JSON.stringify({
+          uid: Number(document.querySelector('#uid').value),
+          display_name: document.querySelector('#display-name').value,
+          poll_interval_seconds: Number(document.querySelector('#bili-interval').value),
+          filter_types: document.querySelector('#filter-types').value.split(',').map(function(value) { return value.trim(); }).filter(Boolean),
+          filter_keywords: document.querySelector('#filter-keywords').value.split(',').map(function(value) { return value.trim(); }).filter(Boolean)
+        })});
+        event.target.reset();
+        document.querySelector('#bili-interval').value = 300;
+        setNotice('B站 UP 主订阅已保存。', 'success');
+        await refreshDashboard();
+      } catch (error) { setNotice(error.message, 'error'); }
+    }
+    async function deleteSubscription(uid) {
+      if (!window.confirm('确认删除 UID ' + uid + ' 的订阅吗？')) return;
+      try {
+        await api('/api/bilibili/subscriptions/' + uid, {method: 'DELETE'});
+        setNotice('订阅已删除。', 'success');
+        await refreshDashboard();
+      } catch (error) { setNotice(error.message, 'error'); }
+    }
+    async function saveSource(event) {
+      event.preventDefault();
+      try {
+        await api('/api/sources', {method: 'POST', body: JSON.stringify({
+          source_key: document.querySelector('#source-key').value,
+          name: document.querySelector('#source-name').value,
+          url: document.querySelector('#source-url').value,
+          category: document.querySelector('#source-category').value,
+          poll_interval_seconds: Number(document.querySelector('#source-interval').value)
+        })});
+        setNotice('官网来源已保存。', 'success');
+        await refreshDashboard();
+      } catch (error) { setNotice(error.message, 'error'); }
+    }
+    async function saveQQ(event) {
+      event.preventDefault();
+      try {
+        await api('/api/qqbot/config', {method: 'POST', body: JSON.stringify({
+          app_id: document.querySelector('#app-id').value,
+          app_secret: document.querySelector('#app-secret').value,
+          base_url: document.querySelector('#qq-base-url').value
+        })});
+        document.querySelector('#app-secret').value = '';
+        setNotice('QQBot 配置已保存。', 'success');
+        await refreshDashboard();
+      } catch (error) { setNotice(error.message, 'error'); }
+    }
+    async function testQQ(event) {
+      event.preventDefault();
+      var targetOpenid = document.querySelector('#test-openid').value;
+      if (!targetOpenid) {
+        setNotice('请先绑定并选择一个推送目标。', 'error');
+        return;
+      }
+      try {
+        var data = await api('/api/qqbot/test', {method: 'POST', body: JSON.stringify({
+          scene_type: document.querySelector('#test-scene').value,
+          target_openid: targetOpenid,
+          content: document.querySelector('#test-content').value
+        })});
+        setNotice('测试消息已发送，message_id：' + (data.message_id || '--'), 'success');
+      } catch (error) { setNotice(error.message, 'error'); }
+    }
+    async function saveTarget(event) {
+      event.preventDefault();
+      try {
+        await api('/api/targets', {method: 'POST', body: JSON.stringify({
+          scene_type: document.querySelector('#scene').value,
+          target_openid: document.querySelector('#openid').value,
+          message_mode: document.querySelector('#message-mode').value
+        })});
+        event.target.reset();
+        setNotice('推送目标已保存。', 'success');
+        await refreshDashboard();
+      } catch (error) { setNotice(error.message, 'error'); }
+    }
+    function stopBindingPolling() {
+      if (bindingPollTimer) {
+        window.clearInterval(bindingPollTimer);
+        bindingPollTimer = null;
+      }
+      bindingPollInFlight = false;
+    }
+    function bindingInstruction(sceneType) {
+      return sceneType === 'group'
+        ? '请在目标群 @机器人后发送上面的绑定码。'
+        : '请在目标 QQ 单聊中直接发送上面的绑定码。';
+    }
+    function updateBindingCountdown(expiresAt) {
+      var expires = new Date(expiresAt).getTime();
+      var remaining = isNaN(expires) ? 0 : Math.max(0, Math.ceil((expires - Date.now()) / 1000));
+      document.querySelector('#binding-expires').textContent = remaining
+        ? '剩余有效期：' + remaining + ' 秒'
+        : '绑定码已到期，正在更新状态...';
+    }
+    function renderBindingStatus(data) {
+      var sceneType = data.scene_type || document.querySelector('#binding-scene').value;
+      var message = document.querySelector('#binding-message');
+      var cancelButton = document.querySelector('#binding-cancel-button');
+      if (data.status === 'pending') {
+        updateBindingCountdown(data.expires_at);
+        message.textContent = bindingInstruction(sceneType);
+        cancelButton.hidden = false;
+      } else if (data.status === 'bound') {
+        document.querySelector('#binding-expires').textContent = '绑定成功';
+        message.textContent = '目标已加入推送目标列表，后续资讯会按所选模式推送。';
+        cancelButton.hidden = true;
+      } else if (data.status === 'expired') {
+        document.querySelector('#binding-expires').textContent = '绑定码已过期';
+        message.textContent = '请重新生成绑定码。';
+        cancelButton.hidden = true;
+      } else if (data.status === 'cancelled') {
+        document.querySelector('#binding-expires').textContent = '绑定码已取消';
+        message.textContent = '如仍需绑定目标，请重新生成绑定码。';
+        cancelButton.hidden = true;
+      }
+    }
+    async function pollBinding() {
+      if (!activeBindingId || bindingPollInFlight) return;
+      bindingPollInFlight = true;
+      var requestId = activeBindingId;
+      try {
+        var data = await api('/api/targets/bindings/' + requestId);
+        if (requestId !== activeBindingId) return;
+        renderBindingStatus(data);
+        if (data.status !== 'pending') {
+          stopBindingPolling();
+          activeBindingId = null;
+          if (data.status === 'bound') {
+            setNotice('QQBot 目标绑定成功。', 'success');
+            await refreshDashboard();
+          }
+        }
+      } catch (error) {
+        if (requestId === activeBindingId) {
+          document.querySelector('#binding-message').textContent = '状态检查失败：' + error.message + '，系统将继续重试。';
+        }
+      } finally {
+        bindingPollInFlight = false;
+      }
+    }
+    async function createBinding(event) {
+      event.preventDefault();
+      stopBindingPolling();
+      activeBindingId = null;
+      var button = event.target.querySelector('button[type="submit"]');
+      button.disabled = true;
+      try {
+        var data = await api('/api/targets/bindings', {method: 'POST', body: JSON.stringify({
+          scene_type: document.querySelector('#binding-scene').value,
+          message_mode: document.querySelector('#binding-message-mode').value
+        })});
+        activeBindingId = data.id;
+        document.querySelector('#binding-card').hidden = false;
+        document.querySelector('#binding-code').textContent = data.code;
+        document.querySelector('#binding-message').textContent = bindingInstruction(data.scene_type);
+        document.querySelector('#binding-cancel-button').hidden = false;
+        renderBindingStatus({status: 'pending', scene_type: data.scene_type, expires_at: data.expires_at});
+        bindingPollTimer = window.setInterval(pollBinding, 1500);
+        setNotice('绑定码已生成，有效期 3 分钟。', 'success');
+      } catch (error) {
+        setNotice(error.message, 'error');
+      } finally {
+        button.disabled = false;
+      }
+    }
+    async function cancelBinding() {
+      if (!activeBindingId) return;
+      var requestId = activeBindingId;
+      try {
+        await api('/api/targets/bindings/' + requestId, {method: 'DELETE'});
+        stopBindingPolling();
+        activeBindingId = null;
+        renderBindingStatus({status: 'cancelled'});
+        setNotice('绑定码已取消。', 'success');
+      } catch (error) { setNotice(error.message, 'error'); }
+    }
+    async function savePoll(event) {
+      event.preventDefault();
+      try {
+        await api('/api/settings/poll', {method: 'POST', body: JSON.stringify({
+          bilibili_poll_interval_seconds: Number(document.querySelector('#default-bili-interval').value),
+          yysls_poll_interval_seconds: Number(document.querySelector('#default-yysls-interval').value)
+        })});
+        setNotice('默认轮询设置已保存。', 'success');
+        await refreshDashboard();
+      } catch (error) { setNotice(error.message, 'error'); }
+    }
+    async function manualPoll() {
+      var button = document.querySelector('#poll-button');
+      button.disabled = true;
+      button.textContent = '轮询中...';
+      try {
+        var data = await api('/api/monitor/poll', {method: 'POST'});
+        var total = (data.results || []).reduce(function(sum, item) { return sum + Number(item.inserted || 0); }, 0);
+        setNotice('本轮轮询完成，新增 ' + total + ' 条内容。', 'success');
+        await refreshDashboard();
+      } catch (error) { setNotice(error.message, 'error'); }
+      finally { button.disabled = false; button.textContent = '立即轮询'; }
+    }
+
+    document.querySelectorAll('.nav-item').forEach(function(item) {
+      item.addEventListener('click', function() { showPage(item.dataset.page); });
+    });
+    document.querySelector('#refresh-button').addEventListener('click', function() { refreshDashboard(true); });
+    document.querySelector('#poll-button').addEventListener('click', manualPoll);
+    document.querySelector('#start-login-button').addEventListener('click', startLogin);
+    document.querySelector('#poll-login-button').addEventListener('click', pollLogin);
+    document.querySelector('#cookie-form').addEventListener('submit', saveCookie);
+    document.querySelector('#bili-form').addEventListener('submit', saveSubscription);
+    document.querySelector('#source-form').addEventListener('submit', saveSource);
+    document.querySelector('#qq-form').addEventListener('submit', saveQQ);
+    document.querySelector('#qq-test-form').addEventListener('submit', testQQ);
+    document.querySelector('#test-scene').addEventListener('change', function() {
+      renderTestTargets((dashboardState && dashboardState.targets) || []);
+    });
+    document.querySelector('#target-form').addEventListener('submit', saveTarget);
+    document.querySelector('#binding-form').addEventListener('submit', createBinding);
+    document.querySelector('#binding-cancel-button').addEventListener('click', cancelBinding);
+    document.querySelector('#poll-form').addEventListener('submit', savePoll);
+    refreshDashboard();
+  </script>
+</body>
+</html>

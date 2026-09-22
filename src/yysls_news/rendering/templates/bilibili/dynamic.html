@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #e7f3f1; color: #20242b; }
+    #capture {
+      width: 1080px;
+      padding: 18px;
+      background: #e7f3f1;
+    }
+    .card {
+      overflow: hidden;
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 2px 12px rgba(53, 85, 91, .12);
+    }
+    .post {
+      padding: 52px 76px 0;
+    }
+    h1 {
+      margin: 0 0 22px;
+      color: #11151b;
+      font-size: 32px;
+      font-weight: 800;
+      line-height: 1.4;
+    }
+    .author-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-height: 64px;
+    }
+    .avatar {
+      width: 58px;
+      height: 58px;
+      flex: 0 0 58px;
+      border-radius: 50%;
+      object-fit: cover;
+      background: #edf0f3;
+    }
+    .avatar-wrap {
+      position: relative;
+      width: 58px;
+      height: 58px;
+      flex: 0 0 58px;
+    }
+    .avatar-wrap .avatar,
+    .pendant {
+      position: absolute;
+      inset: 0;
+    }
+    .pendant {
+      width: 58px;
+      height: 58px;
+      pointer-events: none;
+    }
+    .author-info { min-width: 0; flex: 1; }
+    .author {
+      color: #f05d7d;
+      font-size: 22px;
+      font-weight: 700;
+      line-height: 1.35;
+    }
+    .type-pill {
+      display: inline-block;
+      margin-left: 10px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      color: #438c91;
+      background: #e5f3f1;
+      font-size: 15px;
+      line-height: 1.35;
+      vertical-align: 2px;
+    }
+    .meta {
+      margin-top: 4px;
+      color: #8b929b;
+      font-size: 17px;
+      line-height: 1.4;
+    }
+    .more {
+      align-self: center;
+      padding: 0 6px;
+      color: #8f969d;
+      font-size: 32px;
+      line-height: 1;
+    }
+    .body {
+      padding: 28px 0 34px;
+    }
+    .content {
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: #252b34;
+      font-size: 22px;
+      line-height: 1.85;
+    }
+    .content a,
+    .forward-content a {
+      color: #438cba;
+      text-decoration: none;
+    }
+    .rich-emoji {
+      width: 1.35em;
+      height: 1.35em;
+      margin: 0 .12em;
+      vertical-align: -0.28em;
+      object-fit: contain;
+    }
+    .cover-wrap { margin-top: 26px; }
+    .cover {
+      display: block;
+      width: 100%;
+      max-height: 620px;
+      border-radius: 8px;
+      object-fit: cover;
+      background: #edf0f3;
+    }
+    .images {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 26px;
+    }
+    .images img {
+      display: block;
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      border-radius: 7px;
+      object-fit: cover;
+      background: #edf0f3;
+    }
+    .forward {
+      margin-top: 28px;
+      padding: 20px 22px;
+      border: 1px solid #e3e8eb;
+      border-radius: 9px;
+      background: #f7faf9;
+    }
+    .forward-title {
+      color: #667179;
+      font-size: 17px;
+      font-weight: 700;
+    }
+    .forward-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .forward-avatar {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      object-fit: cover;
+      background: #edf0f3;
+    }
+    .forward-avatar-wrap {
+      position: relative;
+      width: 34px;
+      height: 34px;
+      flex: 0 0 34px;
+    }
+    .forward-avatar-wrap .forward-avatar,
+    .forward-pendant {
+      position: absolute;
+      inset: 0;
+    }
+    .forward-pendant {
+      width: 34px;
+      height: 34px;
+      pointer-events: none;
+    }
+    .forward h2 {
+      margin: 12px 0 0;
+      font-size: 23px;
+      line-height: 1.45;
+    }
+    .forward-content {
+      margin-top: 10px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: #39434b;
+      font-size: 20px;
+      line-height: 1.7;
+    }
+    .footer {
+      margin: 0 76px;
+      padding: 18px 0 28px;
+      border-top: 1px solid #edf0f1;
+      color: #9aa1a8;
+      font-size: 15px;
+      line-height: 1.5;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+  <main id="capture">
+    <article class="card">
+      <section class="post">
+        {% if payload.title %}<h1>{{ payload.title }}</h1>{% endif %}
+        <header class="author-row">
+          <div class="avatar-wrap">
+            {% if payload.avatar_url %}<img class="avatar" src="{{ payload.avatar_url }}" alt="头像">{% else %}<div class="avatar"></div>{% endif %}
+            {% if payload.pendant_url %}<img class="pendant" src="{{ payload.pendant_url }}" alt="">{% endif %}
+          </div>
+          <div class="author-info">
+            <div>
+              <span class="author">{{ payload.author_name or "未知UP主" }}</span>
+              {% if payload.dynamic_type_name %}<span class="type-pill">{{ payload.dynamic_type_name }}</span>{% endif %}
+            </div>
+            {% if payload.publish_time_text or payload.publish_time %}<div class="meta">发布于 {{ payload.publish_time_text or payload.publish_time }}</div>{% endif %}
+          </div>
+          <div class="more" aria-hidden="true">⋮</div>
+        </header>
+        <div class="body">
+          {% if payload.content_html %}
+            <div class="content">{{ payload.content_html | safe }}</div>
+          {% elif payload.content %}
+            <div class="content">{{ payload.content | bili_text }}</div>
+          {% endif %}
+          {% if payload.video_cover %}
+            <div class="cover-wrap"><img class="cover" src="{{ payload.video_cover }}" alt="视频封面"></div>
+          {% endif %}
+          {% if payload.images %}
+            <div class="images">
+              {% for image in payload.images %}<img src="{{ image }}" alt="动态图片">{% endfor %}
+            </div>
+          {% endif %}
+          {% if payload.forward_content %}
+            <div class="forward">
+              <div class="forward-header">
+                {% if payload.forward_content.avatar_url %}
+                  <div class="forward-avatar-wrap">
+                    <img class="forward-avatar" src="{{ payload.forward_content.avatar_url }}" alt="转发作者头像">
+                    {% if payload.forward_content.pendant_url %}<img class="forward-pendant" src="{{ payload.forward_content.pendant_url }}" alt="">{% endif %}
+                  </div>
+                {% endif %}
+                <div class="forward-title">转发原动态 · {{ payload.forward_content.author_name or "未知作者" }}</div>
+              </div>
+              {% if payload.forward_content.title %}<h2>{{ payload.forward_content.title }}</h2>{% endif %}
+              {% if payload.forward_content.content_html %}
+                <div class="forward-content">{{ payload.forward_content.content_html | safe }}</div>
+              {% else %}
+                <div class="forward-content">{{ payload.forward_content.content | bili_text }}</div>
+              {% endif %}
+              {% if payload.forward_content.images %}
+                <div class="images">
+                  {% for image in payload.forward_content.images %}<img src="{{ image }}" alt="转发动态图片">{% endfor %}
+                </div>
+              {% endif %}
+            </div>
+          {% endif %}
+        </div>
+      </section>
+      {% if payload.source_url %}<footer class="footer">原文：{{ payload.source_url }}</footer>{% endif %}
+    </article>
+  </main>
+</body>
+</html>
