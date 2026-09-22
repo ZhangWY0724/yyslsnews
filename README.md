@@ -60,3 +60,7 @@ Copy-Item ".env.example" ".env"
 ```
 
 当前测试只覆盖解析、去重、加密、数据库 Outbox、Playwright 本地模板截图、QQBot 请求构造和管理接口，不会代替真实 B站扫码、官网网络访问或 QQBot 发送联调。
+
+## Linux 部署
+
+Debian/Ubuntu 服务器可以使用 `deploy/install.sh` 完成首次安装，使用 `deploy/update.sh` 拉取仓库更新并重启服务。详细步骤见 [deploy/README.md](./deploy/README.md)。

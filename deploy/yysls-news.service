@@ -1,0 +1,26 @@
+[Unit]
+Description=yysls-news monitoring and delivery service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__SERVICE_USER__
+Group=__SERVICE_USER__
+WorkingDirectory=__PROJECT_DIR__
+EnvironmentFile=/etc/yysls-news/yysls-news.env
+Environment=PYTHONUNBUFFERED=1
+Environment=HOME=/var/lib/yysls-news
+Environment=PLAYWRIGHT_BROWSERS_PATH=__PROJECT_DIR__/.playwright
+ExecStart=__PROJECT_DIR__/.venv/bin/yysls-news all
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=__PROJECT_DIR__/data __PROJECT_DIR__/runtime __PROJECT_DIR__/.playwright /var/lib/yysls-news
+
+[Install]
+WantedBy=multi-user.target
