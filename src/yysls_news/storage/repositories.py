@@ -431,6 +431,13 @@ class ContentRepository:
     def __init__(self, database: Database) -> None:
         self.database = database
 
+    def get_by_id(self, content_id: int) -> dict[str, Any] | None:
+        with self.database.connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM content_items WHERE id = ?", (content_id,)
+            ).fetchone()
+        return dict(row) if row is not None else None
+
     def insert_with_outbox(
         self,
         content: NormalizedContent,

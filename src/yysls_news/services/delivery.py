@@ -2,11 +2,17 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from yysls_news.delivery.qqbot.client import QQBotApiError, QQBotClient, QQTarget
+from yysls_news.delivery.qqbot.client import (
+    QQBotApiError,
+    QQBotClient,
+    QQMessageResult,
+    QQTarget,
+)
 from yysls_news.domain.models import MessageMode, SourceType
 from yysls_news.rendering.renderer import ImageRenderError, PlaywrightRenderer
 from yysls_news.services.runtime_config import RuntimeConfigService
@@ -60,6 +66,25 @@ class DeliveryWorker:
                 self._record_failure(task, exc)
         return processed
 
+    async def send_test(
+        self,
+        content: dict[str, Any],
+        target: dict[str, Any],
+    ) -> QQMessageResult:
+        """直接发送一条历史内容测试消息，不创建正式推送任务。"""
+        client = await self._get_client()
+        task = dict(content)
+        task.update(
+            {
+                "id": f"test-{uuid.uuid4().hex}",
+                "scene_type": target["scene_type"],
+                "target_openid": target["target_openid"],
+                "message_mode": target.get("message_mode") or MessageMode.IMAGE.value,
+                "render_mode": target.get("render_mode") or "playwright",
+            }
+        )
+        return await self._send_task(client, task)
+
     async def run_forever(self, stop_event: Any = None) -> None:
         import asyncio
 
@@ -98,7 +123,7 @@ class DeliveryWorker:
             try:
                 return await self._send_image(client, target, task)
             except ImageRenderError:
-                LOGGER.warning("任务 %s 图片渲染失败，回退 Markdown", task["id"])
+                LOGGER.warning("任务 %s 图片渲染失败，回退 Markdown", task.get("id", "test"))
                 return await self._send_markdown_or_text(client, target, task)
         if mode is MessageMode.MARKDOWN:
             return await self._send_markdown_or_text(client, target, task)
@@ -106,7 +131,7 @@ class DeliveryWorker:
 
     async def _send_image(self, client: QQBotClient, target: QQTarget, task: dict[str, Any]):
         payload = _payload(task)
-        output = self.output_dir / f"task-{int(task['id'])}.png"
+        output = self.output_dir / f"task-{task.get('id', uuid.uuid4().hex)}.png"
         source_type = str(task["source_type"])
         if source_type == SourceType.BILIBILI.value:
             output = await self.image_renderer.render_bilibili(payload, output)

@@ -13,8 +13,10 @@ from pydantic import BaseModel, Field
 from yysls_news.application import ApplicationContext
 from yysls_news.collectors.bilibili.auth import BilibiliLoginError
 from yysls_news.collectors.bilibili.client import BilibiliClient, BilibiliDependencyError
-from yysls_news.delivery.qqbot.client import QQBotClient, QQTarget
+from yysls_news.delivery.qqbot.client import QQBotApiError, QQBotClient, QQTarget
 from yysls_news.domain.models import MessageMode, SceneType
+from yysls_news.rendering.renderer import ImageRenderError, PlaywrightRenderer
+from yysls_news.services.delivery import DeliveryWorker
 from yysls_news.services.qq_binding import BINDING_CODE_TTL_SECONDS
 
 
@@ -72,6 +74,10 @@ class QQBotTestInput(BaseModel):
     scene_type: SceneType
     target_openid: str = Field(min_length=1)
     content: str = Field(default="yysls-news 测试消息", max_length=2000)
+
+
+class HistoricalContentTestPushInput(BaseModel):
+    target_id: int = Field(gt=0)
 
 
 class QQBindingCodeInput(BaseModel):
@@ -258,6 +264,53 @@ def create_app(context: ApplicationContext | None = None) -> FastAPI:
     @app.get("/api/targets")
     async def list_targets(_: None = Depends(require_admin)) -> list[dict[str, Any]]:
         return context.targets.list_all()
+
+    @app.post("/api/contents/{content_id}/test-push")
+    async def test_historical_content_push(
+        content_id: int,
+        payload: HistoricalContentTestPushInput,
+        _: None = Depends(require_admin),
+    ) -> dict[str, str | int]:
+        content = context.contents.get_by_id(content_id)
+        if content is None:
+            raise HTTPException(status_code=404, detail="历史内容不存在")
+
+        target = next(
+            (
+                item
+                for item in context.targets.list_enabled()
+                if int(item["id"]) == payload.target_id
+            ),
+            None,
+        )
+        if target is None:
+            raise HTTPException(status_code=404, detail="推送目标不存在或已停用")
+
+        config = context.runtime_config.qqbot()
+        if not config.app_id or not config.app_secret:
+            raise HTTPException(status_code=400, detail="尚未配置 QQBot AppID/AppSecret")
+
+        worker = DeliveryWorker(
+            tasks=context.tasks,
+            runtime_config=context.runtime_config,
+            image_renderer=PlaywrightRenderer(
+                timeout_ms=int(context.settings.http_timeout_seconds * 1000)
+            ),
+        )
+        try:
+            result = await worker.send_test(content, target)
+        except ImageRenderError as exc:
+            raise HTTPException(status_code=502, detail=f"历史内容图片渲染失败：{exc}") from exc
+        except QQBotApiError as exc:
+            raise HTTPException(status_code=502, detail=f"QQBot 测试推送失败：{exc}") from exc
+        finally:
+            await worker.aclose()
+        return {
+            "content_id": content_id,
+            "target_id": payload.target_id,
+            "message_id": result.message_id,
+            "trace_id": result.trace_id,
+        }
 
     @app.post("/api/targets/bindings")
     async def create_target_binding(

@@ -7,7 +7,9 @@ from yysls_news.application import ApplicationContext
 from yysls_news.collectors.bilibili.auth import BilibiliLoginError, LoginPollResult
 from yysls_news.collectors.bilibili.client import BilibiliClient
 from yysls_news.config import Settings
-from yysls_news.domain.models import SceneType
+from yysls_news.delivery.qqbot.client import QQMessageResult
+from yysls_news.domain.models import MessageMode, NormalizedContent, SceneType, SourceType
+from yysls_news.services.delivery import DeliveryWorker
 from yysls_news.web.app import create_app
 
 
@@ -92,6 +94,75 @@ def test_web_configures_subscription_target_and_qqbot(tmp_path, monkeypatch) -> 
         assert "每 2 秒自动检查状态" in html
         assert "自动绑定目标" in html
         assert "已绑定目标" in html
+        assert "测试推送" in html
+
+
+def test_historical_content_test_push_uses_selected_target(tmp_path, monkeypatch) -> None:
+    settings = Settings(
+        app_env="test",
+        database_path=tmp_path / "historical-test-push.db",
+        encryption_key=Fernet.generate_key().decode(),
+        admin_username="admin",
+        admin_password="password",
+        host="127.0.0.1",
+        port=43100,
+        bilibili_poll_interval_seconds=300,
+        yysls_poll_interval_seconds=600,
+        http_timeout_seconds=5,
+        qqbot_api_base_url="https://api.bot.qq.com",
+        qqbot_app_id="",
+        qqbot_app_secret="",
+    )
+    context = ApplicationContext.create(settings)
+    context.runtime_config.save_qqbot("app", "secret")
+    target_id = context.targets.upsert(
+        SceneType.GROUP,
+        "group-openid",
+        message_mode=MessageMode.IMAGE,
+    )
+    content_id, inserted, _ = context.contents.insert_with_outbox(
+        NormalizedContent(
+            source_type=SourceType.BILIBILI,
+            source_key="42",
+            external_id="dynamic-1",
+            title="历史动态",
+            author="测试UP",
+            category="文字",
+            content_text="历史动态内容",
+            content_html="<p>历史动态内容</p>",
+            source_url="https://www.bilibili.com/opus/dynamic-1",
+            published_at=None,
+            render_payload={"content": "历史动态内容"},
+            raw_payload={},
+        ),
+        create_tasks=False,
+    )
+    assert inserted is True
+    captured: dict[str, object] = {}
+
+    async def fake_send_test(self, content, target):
+        captured["content_id"] = content["id"]
+        captured["target_id"] = target["id"]
+        return QQMessageResult(message_id="message-1", timestamp="", trace_id="trace-1")
+
+    monkeypatch.setattr(DeliveryWorker, "send_test", fake_send_test)
+    app = create_app(context)
+
+    with TestClient(app) as client:
+        response = client.post(
+            f"/api/contents/{content_id}/test-push",
+            auth=("admin", "password"),
+            json={"target_id": target_id},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "content_id": content_id,
+        "target_id": target_id,
+        "message_id": "message-1",
+        "trace_id": "trace-1",
+    }
+    assert captured == {"content_id": content_id, "target_id": target_id}
 
 
 def test_bilibili_login_saves_and_exposes_username(tmp_path, monkeypatch) -> None:

@@ -71,6 +71,8 @@
     .content-grid.equal { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .panel { min-width: 0; padding: 20px; }
     .panel-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 15px; }
+    .panel-header-actions { display: flex; align-items: center; gap: 8px; }
+    .panel-header-actions select { width: auto; min-width: 180px; height: 32px; }
     .panel-title { margin: 0; font-size: 15px; }
     .panel-hint { color: var(--muted); font-size: 12px; }
     .table-wrap { overflow-x: auto; margin: 0 -4px; }
@@ -181,7 +183,7 @@
           <section class="panel"><div class="panel-header"><h2 class="panel-title">来源运行状态</h2><span class="panel-hint">按最近一次轮询展示</span></div><div class="table-wrap"><table><thead><tr><th>来源</th><th>类型</th><th>状态</th><th>下次轮询</th><th>最近成功</th></tr></thead><tbody id="source-table"></tbody></table></div></section>
           <section class="panel"><div class="panel-header"><h2 class="panel-title">服务状态</h2><span class="panel-hint">实时配置摘要</span></div><div class="service-list" id="service-list"></div></section>
         </div>
-        <section class="panel"><div class="panel-header"><h2 class="panel-title">最近采集内容</h2><span class="panel-hint">仅展示最近 20 条</span></div><div class="table-wrap"><table><thead><tr><th>标题</th><th>来源</th><th>分类</th><th>采集时间</th><th>原文</th></tr></thead><tbody id="recent-table"></tbody></table></div></section>
+        <section class="panel"><div class="panel-header"><h2 class="panel-title">最近采集内容</h2><div class="panel-header-actions"><span class="panel-hint">测试目标</span><select id="history-test-target" aria-label="历史内容测试目标"><option value="">暂无已启用目标</option></select></div></div><div class="table-wrap"><table><thead><tr><th>标题</th><th>来源</th><th>分类</th><th>采集时间</th><th>操作</th></tr></thead><tbody id="recent-table"></tbody></table></div><p class="form-note">选择推送目标后，点击“测试推送”可按该目标的消息模式发送历史内容，不会创建正式推送任务。</p></section>
       </section>
 
       <section class="page" id="page-bilibili">
@@ -392,10 +394,14 @@
         '<div class="service-item"><div><div class="service-name">图片渲染</div><div class="service-detail">本地模板 / 官网容器</div></div><span class="chip chip-blue">Playwright</span></div>' +
         '<div class="service-item"><div><div class="service-name">推送队列</div><div class="service-detail">已发送 ' + (counts.sent || 0) + ' · 失败 ' + (counts.failed || 0) + '</div></div>' + chip(pending ? 'pending' : 'sent', pending ? 'orange' : 'green') + '</div>';
 
+      var hasHistoryTarget = (data.targets || []).some(function(item) { return item.enabled; });
       document.querySelector('#recent-table').innerHTML = contents.length ? contents.map(function(item) {
         var link = escapeHtml(item.source_url || '#');
-        return '<tr><td><div class="primary-text">' + escapeHtml(item.title || '未命名内容') + '</div><div class="secondary-text">' + escapeHtml(item.author || '') + '</div></td><td>' + escapeHtml(item.source_type === 'bilibili' ? 'B站' : '燕云官网') + '</td><td>' + escapeHtml(item.category || '--') + '</td><td>' + formatDate(item.created_at) + '</td><td><a href="' + link + '" target="_blank" rel="noreferrer">打开</a></td></tr>';
+        return '<tr><td><div class="primary-text">' + escapeHtml(item.title || '未命名内容') + '</div><div class="secondary-text">' + escapeHtml(item.author || '') + '</div></td><td>' + escapeHtml(item.source_type === 'bilibili' ? 'B站' : '燕云官网') + '</td><td>' + escapeHtml(item.category || '--') + '</td><td>' + formatDate(item.created_at) + '</td><td><button class="btn btn-small" type="button" data-test-content-id="' + escapeHtml(item.id) + '"' + (hasHistoryTarget ? '' : ' disabled') + '>测试推送</button> <a href="' + link + '" target="_blank" rel="noreferrer">打开</a></td></tr>';
       }).join('') : emptyRow(5);
+      document.querySelectorAll('[data-test-content-id]').forEach(function(button) {
+        button.addEventListener('click', function() { testHistoricalContent(button.dataset.testContentId, button); });
+      });
     }
     function renderSubscriptions(items) {
       document.querySelector('#bili-table').innerHTML = items.length ? items.map(function(item) {
@@ -448,6 +454,30 @@
         : targets[0].target_openid;
       note.textContent = '目标来自“推送目标”页面的已绑定记录，实际发送使用完整 OpenID。';
     }
+    function renderHistoryTestTargets(items) {
+      var select = document.querySelector('#history-test-target');
+      var previousValue = select.value;
+      var targets = (items || []).filter(function(item) { return item.enabled; });
+      select.innerHTML = '';
+      if (!targets.length) {
+        var emptyOption = document.createElement('option');
+        emptyOption.value = '';
+        emptyOption.textContent = '暂无已启用目标';
+        select.appendChild(emptyOption);
+        select.disabled = true;
+        return;
+      }
+      targets.forEach(function(item) {
+        var option = document.createElement('option');
+        option.value = item.id;
+        option.textContent = (item.scene_type === 'group' ? '群聊' : '单聊') + ' · ' + maskOpenId(item.target_openid);
+        select.appendChild(option);
+      });
+      select.disabled = false;
+      select.value = targets.some(function(item) { return String(item.id) === previousValue; })
+        ? previousValue
+        : String(targets[0].id);
+    }
     function maskOpenId(value) {
       var text = String(value || '');
       return text.length > 10 ? text.slice(0, 5) + '...' + text.slice(-4) : text;
@@ -482,6 +512,7 @@
         var targets = dashboardState.targets || [];
         renderTargets(targets);
         renderTestTargets(targets);
+        renderHistoryTestTargets(targets);
         fillConfig(dashboardState);
         document.querySelector('#last-refresh').textContent = '刷新于 ' + new Date().toLocaleTimeString('zh-CN', {hour12: false});
         if (showMessage) setNotice('数据已刷新。', 'success');
@@ -637,6 +668,27 @@
         })});
         setNotice('测试消息已发送，message_id：' + (data.message_id || '--'), 'success');
       } catch (error) { setNotice(error.message, 'error'); }
+    }
+    async function testHistoricalContent(contentId, button) {
+      var targetId = document.querySelector('#history-test-target').value;
+      if (!targetId) {
+        setNotice('请先绑定并选择一个推送目标。', 'error');
+        return;
+      }
+      var originalText = button.textContent;
+      button.disabled = true;
+      button.textContent = '推送中...';
+      try {
+        var data = await api('/api/contents/' + contentId + '/test-push', {method: 'POST', body: JSON.stringify({
+          target_id: Number(targetId)
+        })});
+        setNotice('历史内容测试推送已发送，message_id：' + (data.message_id || '--'), 'success');
+      } catch (error) {
+        setNotice(error.message, 'error');
+      } finally {
+        button.disabled = false;
+        button.textContent = originalText;
+      }
     }
     async function saveTarget(event) {
       event.preventDefault();
