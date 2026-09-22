@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import logging
 import secrets
 from pathlib import Path
 from typing import Any
 
-from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
@@ -16,8 +17,12 @@ from yysls_news.collectors.bilibili.client import BilibiliClient, BilibiliDepend
 from yysls_news.delivery.qqbot.client import QQBotApiError, QQBotClient, QQTarget
 from yysls_news.domain.models import MessageMode, SceneType
 from yysls_news.rendering.renderer import ImageRenderError, PlaywrightRenderer
+from yysls_news.security.passwords import hash_password, verify_password
 from yysls_news.services.delivery import DeliveryWorker
 from yysls_news.services.qq_binding import BINDING_CODE_TTL_SECONDS
+from yysls_news.services.runtime_logs import attach_runtime_log_handler
+
+LOGGER = logging.getLogger(__name__)
 
 
 class BilibiliSubscriptionInput(BaseModel):
@@ -41,6 +46,7 @@ class YyslsSourceInput(BaseModel):
 class DeliveryTargetInput(BaseModel):
     scene_type: SceneType
     target_openid: str = Field(min_length=1, max_length=200)
+    display_name: str = Field(default="", max_length=200)
     enabled: bool = True
     message_mode: MessageMode = MessageMode.IMAGE
     render_mode: str = Field(default="playwright", pattern="^playwright$")
@@ -85,42 +91,116 @@ class QQBindingCodeInput(BaseModel):
     message_mode: MessageMode = MessageMode.IMAGE
 
 
+class AdminPasswordChangeInput(BaseModel):
+    new_password: str = Field(min_length=8, max_length=128)
+    confirm_password: str = Field(min_length=8, max_length=128)
+
+
 def create_app(context: ApplicationContext | None = None) -> FastAPI:
     context = context or ApplicationContext.create()
     app = FastAPI(title="资讯监控推送服务", version="0.1.0")
     app.state.context = context
+    app.state.runtime_log_handler = attach_runtime_log_handler(context.runtime_logs)
     templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
     basic = HTTPBasic(auto_error=False)
 
-    def require_admin(
+    def require_authenticated_admin(
         credentials: HTTPBasicCredentials | None = Depends(basic),
-    ) -> None:
-        if not context.settings.admin_password:
+    ) -> HTTPBasicCredentials:
+        stored_password_hash = context.runtime_config.admin_password_hash()
+        if not stored_password_hash and not context.settings.admin_password:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="未配置 ADMIN_PASSWORD，管理页面暂不可用",
             )
-        if not credentials or not (
-            secrets.compare_digest(credentials.username, context.settings.admin_username)
-            and secrets.compare_digest(credentials.password, context.settings.admin_password)
+        if not credentials or not secrets.compare_digest(
+            credentials.username, context.settings.admin_username
         ):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="管理页面认证失败",
                 headers={"WWW-Authenticate": "Basic"},
             )
+        password_valid = (
+            verify_password(credentials.password, stored_password_hash)
+            if stored_password_hash
+            else secrets.compare_digest(credentials.password, context.settings.admin_password)
+        )
+        if not password_valid:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="管理页面认证失败",
+                headers={"WWW-Authenticate": "Basic"},
+            )
+        return credentials
+
+    def require_admin(
+        credentials: HTTPBasicCredentials = Depends(require_authenticated_admin),
+    ) -> HTTPBasicCredentials:
+        if not context.runtime_config.admin_password_hash():
+            raise HTTPException(
+                status_code=status.HTTP_428_PRECONDITION_REQUIRED,
+                detail="首次登录必须先修改管理密码",
+            )
+        return credentials
 
     @app.get("/health")
     async def health() -> dict[str, str]:
         return {"status": "ok", "service": "yysls-news"}
 
+    @app.get("/api/logs")
+    async def runtime_logs(
+        after_id: int = Query(default=0, ge=0),
+        limit: int = Query(default=200, ge=1, le=500),
+        _: None = Depends(require_admin),
+    ) -> dict[str, Any]:
+        return {
+            "items": context.runtime_logs.read(after_id=after_id, limit=limit),
+            "latest_id": context.runtime_logs.latest_id(),
+        }
+
+    @app.get("/api/push-history")
+    async def push_history(
+        limit: int = Query(default=100, ge=1, le=500),
+        status_filter: str | None = Query(default=None, alias="status"),
+        _: None = Depends(require_admin),
+    ) -> dict[str, Any]:
+        allowed_statuses = {"processing", "sent", "failed"}
+        if status_filter and status_filter not in allowed_statuses:
+            raise HTTPException(status_code=400, detail="无效的推送记录状态")
+        return {
+            "items": context.push_history.list_recent(limit, status_filter),
+            "counts": context.push_history.count_by_status(),
+        }
+
     @app.get("/", response_class=HTMLResponse)
-    async def index(request: Request, _: None = Depends(require_admin)) -> Any:
+    async def index(
+        request: Request,
+        _: HTTPBasicCredentials = Depends(require_authenticated_admin),
+    ) -> Any:
+        if not context.runtime_config.admin_password_hash():
+            return templates.TemplateResponse(
+                request=request,
+                name="password_change.html",
+                context={"title": "首次登录 - 修改管理密码"},
+            )
         return templates.TemplateResponse(
             request=request,
             name="index.html",
             context={"title": "资讯监控推送服务"},
         )
+
+    @app.post("/api/auth/password")
+    async def change_admin_password(
+        payload: AdminPasswordChangeInput,
+        _: HTTPBasicCredentials = Depends(require_authenticated_admin),
+    ) -> dict[str, bool]:
+        if payload.new_password != payload.confirm_password:
+            raise HTTPException(status_code=400, detail="两次输入的新密码不一致")
+        if secrets.compare_digest(payload.new_password, context.settings.admin_password):
+            raise HTTPException(status_code=400, detail="新密码不能与初始密码相同")
+        context.runtime_config.save_admin_password_hash(hash_password(payload.new_password))
+        return {"changed": True}
 
     @app.get("/api/dashboard")
     async def dashboard(_: None = Depends(require_admin)) -> dict[str, Any]:
@@ -292,6 +372,7 @@ def create_app(context: ApplicationContext | None = None) -> FastAPI:
 
         worker = DeliveryWorker(
             tasks=context.tasks,
+            push_history=context.push_history,
             runtime_config=context.runtime_config,
             image_renderer=PlaywrightRenderer(
                 timeout_ms=int(context.settings.http_timeout_seconds * 1000)
@@ -300,8 +381,10 @@ def create_app(context: ApplicationContext | None = None) -> FastAPI:
         try:
             result = await worker.send_test(content, target)
         except ImageRenderError as exc:
+            LOGGER.exception("历史内容测试推送图片渲染失败: content_id=%s", content_id)
             raise HTTPException(status_code=502, detail=f"历史内容图片渲染失败：{exc}") from exc
         except QQBotApiError as exc:
+            LOGGER.exception("历史内容测试推送 QQBot 发送失败: content_id=%s", content_id)
             raise HTTPException(status_code=502, detail=f"QQBot 测试推送失败：{exc}") from exc
         finally:
             await worker.aclose()
@@ -354,6 +437,7 @@ def create_app(context: ApplicationContext | None = None) -> FastAPI:
         target_id = context.targets.upsert(
             scene_type=payload.scene_type,
             target_openid=payload.target_openid,
+            display_name=payload.display_name,
             enabled=payload.enabled,
             message_mode=payload.message_mode,
             render_mode=payload.render_mode,
@@ -397,12 +481,35 @@ def create_app(context: ApplicationContext | None = None) -> FastAPI:
         config = context.runtime_config.qqbot()
         if not config.app_id or not config.app_secret:
             raise HTTPException(status_code=400, detail="尚未配置 QQBot AppID/AppSecret")
+        target = next(
+            (
+                item
+                for item in context.targets.list_all()
+                if item["scene_type"] == payload.scene_type.value
+                and item["target_openid"] == payload.target_openid
+            ),
+            None,
+        )
+        history_id = context.push_history.create_attempt(
+            content_item_id=None,
+            delivery_target_id=int(target["id"]) if target else None,
+            trigger_type="qqbot_test",
+            source_type="",
+            title="QQBot 测试消息",
+            scene_type=payload.scene_type.value,
+            target_openid=payload.target_openid,
+            target_display_name=str(target.get("display_name") or "") if target else "",
+        )
         client = QQBotClient(config.base_url, config.app_id, config.app_secret)
         try:
             result = await client.send_text(
                 QQTarget(payload.scene_type.value, payload.target_openid), payload.content
             )
+            context.push_history.mark_sent(history_id, result.message_id, result.trace_id)
             return {"message_id": result.message_id, "trace_id": result.trace_id}
+        except Exception as exc:
+            context.push_history.mark_failed(history_id, f"{type(exc).__name__}: {exc}")
+            raise
         finally:
             await client.aclose()
 

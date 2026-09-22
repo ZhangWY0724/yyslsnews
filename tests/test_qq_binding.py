@@ -24,7 +24,7 @@ def test_binding_code_is_one_time_and_creates_target(tmp_path) -> None:
     assert BINDING_CODE_TTL_SECONDS == 180
     assert service.get_status(binding.id)["status"] == "pending"
 
-    result = service.consume(SceneType.GROUP, binding.code, "group-openid")
+    result = service.consume(SceneType.GROUP, binding.code, "group-openid", "测试群聊")
     assert result is not None
     assert result.target_openid == "group-openid"
     assert service.consume(SceneType.GROUP, binding.code, "another-openid") is None
@@ -34,6 +34,7 @@ def test_binding_code_is_one_time_and_creates_target(tmp_path) -> None:
     assert len(targets) == 1
     assert targets[0]["scene_type"] == "group"
     assert targets[0]["target_openid"] == "group-openid"
+    assert targets[0]["display_name"] == "测试群聊"
     assert targets[0]["message_mode"] == "image"
 
 

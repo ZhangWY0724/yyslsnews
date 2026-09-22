@@ -9,6 +9,7 @@ from yysls_news.storage.repositories import AppSettingsRepository
 
 QQBOT_CONFIG_KEY = "qqbot_config"
 POLL_CONFIG_KEY = "poll_config"
+ADMIN_PASSWORD_HASH_KEY = "admin_password_hash"
 
 
 @dataclass(frozen=True)
@@ -115,6 +116,12 @@ class RuntimeConfigService:
         }
         self.repository.set(POLL_CONFIG_KEY, json.dumps(values, separators=(",", ":")))
         return values
+
+    def admin_password_hash(self) -> str:
+        return self.repository.get(ADMIN_PASSWORD_HASH_KEY)
+
+    def save_admin_password_hash(self, password_hash: str) -> None:
+        self.repository.set(ADMIN_PASSWORD_HASH_KEY, password_hash)
 
 
 def _mask(value: str) -> str:

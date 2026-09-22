@@ -66,6 +66,7 @@ fi
 log "安装项目依赖"
 "${VENV_DIR}/bin/python" -m pip install --upgrade pip
 "${VENV_DIR}/bin/python" -m pip install --no-cache-dir -e "${PROJECT_DIR}"
+chown -R "${SERVICE_USER}:${SERVICE_USER}" "${VENV_DIR}"
 
 log "安装 Playwright Chromium 及 Linux 运行依赖"
 "${VENV_DIR}/bin/playwright" install-deps chromium

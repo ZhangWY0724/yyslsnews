@@ -71,6 +71,7 @@ class DeliveryTarget:
     id: int | None
     scene_type: SceneType
     target_openid: str
+    display_name: str = ""
     enabled: bool = True
     message_mode: MessageMode = MessageMode.IMAGE
     render_mode: str = "playwright"

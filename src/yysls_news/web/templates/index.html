@@ -124,6 +124,7 @@
     .binding-code { margin: 8px 0 3px; color: var(--blue); font-size: 28px; font-weight: 800; letter-spacing: 5px; }
     .binding-countdown { color: var(--orange); font-size: 12px; font-weight: 650; }
     .binding-card .form-note { margin: 9px 0 12px; text-align: left; }
+    .runtime-log { min-height: 520px; max-height: calc(100vh - 260px); overflow: auto; margin: 0; padding: 16px; border-radius: 9px; color: #dce5ff; background: #111c35; font: 12px/1.65 Consolas, "Microsoft YaHei", monospace; white-space: pre-wrap; word-break: break-word; }
     @media (max-width: 1050px) {
       .sidebar { width: 210px; flex-basis: 210px; }
       .main { padding: 24px 22px 40px; }
@@ -162,6 +163,8 @@
         <button class="nav-item" data-page="qqbot" type="button"><span class="nav-icon">✦</span>QQBot 配置</button>
         <button class="nav-item" data-page="targets" type="button"><span class="nav-icon">◎</span>推送目标</button>
         <button class="nav-item" data-page="settings" type="button"><span class="nav-icon">⚙</span>系统设置</button>
+        <button class="nav-item" data-page="logs" type="button"><span class="nav-icon">≡</span>运行日志</button>
+        <button class="nav-item" data-page="history" type="button"><span class="nav-icon">▤</span>推送记录</button>
       </nav>
       <div class="sidebar-bottom"><span class="connection-dot"></span><span>管理服务已连接</span></div>
     </aside>
@@ -246,11 +249,11 @@
           </section>
           <section class="panel">
             <div class="panel-header"><h2 class="panel-title">手动新增或更新目标</h2><span class="panel-hint">同一场景和 OpenID 会自动更新</span></div>
-            <form id="target-form"><div class="form-grid"><div class="field"><label for="scene">目标类型</label><select id="scene"><option value="group">群聊 group_openid</option><option value="user">单聊 user_openid</option></select></div><div class="field"><label for="openid">OpenID</label><input id="openid" required></div><div class="field full"><label for="message-mode">消息模式</label><select id="message-mode"><option value="image">图片（推荐）</option><option value="markdown">Markdown</option><option value="text">文本</option></select></div></div><div class="form-actions"><button class="btn" type="submit">保存推送目标</button></div></form>
+            <form id="target-form"><div class="form-grid"><div class="field"><label for="scene">目标类型</label><select id="scene"><option value="group">群聊 group_openid</option><option value="user">单聊 user_openid</option></select></div><div class="field"><label for="openid">OpenID</label><input id="openid" required></div><div class="field"><label for="target-display-name">显示名称（可选）</label><input id="target-display-name" placeholder="自动绑定时会尽量获取"></div><div class="field full"><label for="message-mode">消息模式</label><select id="message-mode"><option value="image">图片（推荐）</option><option value="markdown">Markdown</option><option value="text">文本</option></select></div></div><div class="form-actions"><button class="btn" type="submit">保存推送目标</button></div></form>
             <div class="info-box" style="margin-top:20px">自动绑定成功后，OpenID 会直接写入下方目标列表；绑定码只显示原文一次，3 分钟后自动失效。</div>
           </section>
         </div>
-        <section class="panel"><div class="panel-header"><h2 class="panel-title">目标列表</h2><span class="panel-hint">图片模式统一使用 Playwright</span></div><div class="table-wrap"><table><thead><tr><th>类型</th><th>OpenID</th><th>消息模式</th><th>状态</th><th>更新时间</th></tr></thead><tbody id="target-table"></tbody></table></div></section>
+        <section class="panel"><div class="panel-header"><h2 class="panel-title">目标列表</h2><span class="panel-hint">图片模式统一使用 Playwright</span></div><div class="table-wrap"><table><thead><tr><th>类型</th><th>名称 / OpenID</th><th>消息模式</th><th>状态</th><th>更新时间</th></tr></thead><tbody id="target-table"></tbody></table></div></section>
       </section>
 
       <section class="page" id="page-settings">
@@ -258,6 +261,23 @@
           <section class="panel"><div class="panel-header"><h2 class="panel-title">默认轮询周期</h2><span class="panel-hint">单来源配置可单独覆盖</span></div><form id="poll-form"><div class="form-grid"><div class="field"><label for="default-bili-interval">B站默认间隔（秒）</label><input id="default-bili-interval" type="number" min="60" value="300" required></div><div class="field"><label for="default-yysls-interval">官网默认间隔（秒）</label><input id="default-yysls-interval" type="number" min="60" value="600" required></div></div><div class="form-actions"><button class="btn btn-primary" type="submit">保存轮询设置</button></div></form></section>
           <section class="panel"><div class="panel-header"><h2 class="panel-title">图片渲染策略</h2><span class="chip chip-blue">Playwright</span></div><div class="info-box">B站使用本地 HTML 模板截图；官网优先打开详情页并截取 <code>#NIE-art</code>。两者统一使用 Playwright，浏览器只在处理推送图片时按需启动。</div><div class="service-list" style="margin-top:18px"><div class="service-item"><div><div class="service-name">B站渲染</div><div class="service-detail">结构化 API 数据 + 本地模板</div></div><span class="chip chip-green">已启用</span></div><div class="service-item"><div><div class="service-name">官网渲染</div><div class="service-detail">原始 #NIE-art 容器</div></div><span class="chip chip-green">已启用</span></div></div></section>
         </div>
+      </section>
+
+      <section class="page" id="page-logs">
+        <section class="panel">
+          <div class="panel-header"><div><h2 class="panel-title">实时运行日志</h2><span class="panel-hint">仅保留当前进程最近 500 条，页面每 2 秒自动刷新</span></div><div class="panel-header-actions"><button class="btn btn-small" id="logs-refresh-button" type="button">刷新日志</button></div></div>
+          <pre class="runtime-log" id="runtime-log-output">正在加载日志...</pre>
+        </section>
+      </section>
+
+      <section class="page" id="page-history">
+        <section class="panel">
+          <div class="panel-header">
+            <div><h2 class="panel-title">历史推送记录</h2><span class="panel-hint" id="push-history-summary">记录自动推送、历史测试和 QQBot 测试结果</span></div>
+            <div class="panel-header-actions"><select id="push-history-status" aria-label="推送记录状态"><option value="">全部状态</option><option value="sent">成功</option><option value="failed">失败</option><option value="processing">发送中</option></select><button class="btn btn-small" id="push-history-refresh-button" type="button">刷新记录</button></div>
+          </div>
+          <div class="table-wrap"><table><thead><tr><th>时间</th><th>内容</th><th>目标</th><th>触发方式</th><th>结果</th><th>消息信息</th></tr></thead><tbody id="push-history-table"></tbody></table></div>
+        </section>
       </section>
     </main>
   </div>
@@ -270,13 +290,20 @@
     var activeBindingId = null;
     var bindingPollTimer = null;
     var bindingPollInFlight = false;
+    var runtimeLogTimer = null;
+    var runtimeLogCursor = 0;
+    var runtimeLogRequestInFlight = false;
+    var pushHistoryTimer = null;
+    var pushHistoryRequestInFlight = false;
     var pageMeta = {
       overview: ['系统总览', '查看采集来源、登录状态和推送队列。'],
       bilibili: ['B站监控', '配置扫码登录、UP 主订阅和动态过滤规则。'],
       yysls: ['官网来源', '配置燕云十六声官网新闻列表来源和轮询周期。'],
       qqbot: ['QQBot 配置', '配置官方 Bot API v2 凭据和发送测试。'],
       targets: ['推送目标', '配置图片、Markdown 或文本消息的接收目标。'],
-      settings: ['系统设置', '调整默认轮询周期和图片渲染策略。']
+      settings: ['系统设置', '调整默认轮询周期和图片渲染策略。'],
+      logs: ['运行日志', '查看采集、推送、QQ Gateway 和管理接口的实时日志。'],
+      history: ['推送记录', '查看每次自动推送、测试推送的成功和失败记录。']
     };
     var statusLabels = {
       logged_in: '已登录', not_configured: '未配置', waiting_scan: '等待扫码',
@@ -329,6 +356,16 @@
       });
       document.querySelector('#page-title').textContent = pageMeta[page][0];
       document.querySelector('#page-subtitle').textContent = pageMeta[page][1];
+      if (page === 'logs') {
+        startRuntimeLogPolling();
+      } else {
+        stopRuntimeLogPolling();
+      }
+      if (page === 'history') {
+        startPushHistoryPolling();
+      } else {
+        stopPushHistoryPolling();
+      }
     }
     async function api(url, options) {
       var requestOptions = options || {};
@@ -419,7 +456,8 @@
     function renderTargets(items) {
       var modeLabels = {image: '图片', markdown: 'Markdown', text: '文本'};
       document.querySelector('#target-table').innerHTML = items.length ? items.map(function(item) {
-        return '<tr><td>' + escapeHtml(item.scene_type === 'group' ? '群聊' : '单聊') + '</td><td>' + escapeHtml(maskOpenId(item.target_openid)) + '</td><td>' + escapeHtml(modeLabels[item.message_mode] || item.message_mode) + '</td><td>' + chip(item.enabled ? 'logged_in' : 'not_configured', item.enabled ? 'green' : 'gray') + '</td><td>' + formatDate(item.updated_at) + '</td></tr>';
+        var name = item.display_name || (item.scene_type === 'group' ? '未获取群名称' : '未获取昵称');
+        return '<tr><td>' + escapeHtml(item.scene_type === 'group' ? '群聊' : '单聊') + '</td><td><div class="primary-text">' + escapeHtml(name) + '</div><div class="secondary-text">' + escapeHtml(maskOpenId(item.target_openid)) + '</div></td><td>' + escapeHtml(modeLabels[item.message_mode] || item.message_mode) + '</td><td>' + chip(item.enabled ? 'logged_in' : 'not_configured', item.enabled ? 'green' : 'gray') + '</td><td>' + formatDate(item.updated_at) + '</td></tr>';
       }).join('') : emptyRow(5, '还没有配置推送目标');
     }
     function renderTestTargets(items) {
@@ -445,7 +483,7 @@
       targets.forEach(function(item) {
         var option = document.createElement('option');
         option.value = item.target_openid;
-        option.textContent = (sceneType === 'group' ? '群聊' : '单聊') + ' · ' + maskOpenId(item.target_openid);
+        option.textContent = (sceneType === 'group' ? '群聊' : '单聊') + ' · ' + (item.display_name || '未获取名称') + ' · ' + maskOpenId(item.target_openid);
         select.appendChild(option);
       });
       select.disabled = false;
@@ -470,7 +508,7 @@
       targets.forEach(function(item) {
         var option = document.createElement('option');
         option.value = item.id;
-        option.textContent = (item.scene_type === 'group' ? '群聊' : '单聊') + ' · ' + maskOpenId(item.target_openid);
+        option.textContent = (item.scene_type === 'group' ? '群聊' : '单聊') + ' · ' + (item.display_name || '未获取名称') + ' · ' + maskOpenId(item.target_openid);
         select.appendChild(option);
       });
       select.disabled = false;
@@ -481,6 +519,93 @@
     function maskOpenId(value) {
       var text = String(value || '');
       return text.length > 10 ? text.slice(0, 5) + '...' + text.slice(-4) : text;
+    }
+    async function refreshRuntimeLogs(reset) {
+      if (runtimeLogRequestInFlight) return;
+      runtimeLogRequestInFlight = true;
+      var output = document.querySelector('#runtime-log-output');
+      if (reset) {
+        runtimeLogCursor = 0;
+        output.textContent = '';
+      }
+      try {
+        var data = await api('/api/logs?after_id=' + runtimeLogCursor + '&limit=300');
+        var items = data.items || [];
+        if (items.length && (output.textContent === '暂无运行日志' || output.textContent.indexOf('日志加载失败：') === 0)) {
+          output.textContent = '';
+        }
+        items.forEach(function(item) {
+          var timestamp = formatDate(item.timestamp);
+          output.textContent += '[' + timestamp + '] ' + item.level + ' ' + item.logger + ' - ' + item.message + '\n';
+          runtimeLogCursor = Math.max(runtimeLogCursor, Number(item.id || 0));
+        });
+        if (!output.textContent) output.textContent = '暂无运行日志';
+        output.scrollTop = output.scrollHeight;
+      } catch (error) {
+        if (!output.textContent) output.textContent = '日志加载失败：' + error.message;
+      } finally {
+        runtimeLogRequestInFlight = false;
+      }
+    }
+    function startRuntimeLogPolling() {
+      refreshRuntimeLogs(true);
+      if (!runtimeLogTimer) {
+        runtimeLogTimer = window.setInterval(function() { refreshRuntimeLogs(false); }, 2000);
+      }
+    }
+    function stopRuntimeLogPolling() {
+      if (runtimeLogTimer) {
+        window.clearInterval(runtimeLogTimer);
+        runtimeLogTimer = null;
+      }
+    }
+    function pushHistoryStatusLabel(value) {
+      return {processing: '发送中', sent: '成功', failed: '失败'}[value] || value || '--';
+    }
+    function pushHistoryStatusTone(value) {
+      return value === 'sent' ? 'green' : (value === 'failed' ? 'red' : 'orange');
+    }
+    function pushHistoryTriggerLabel(value) {
+      return {scheduled: '自动推送', historical_test: '历史测试', qqbot_test: 'QQBot 测试'}[value] || value || '--';
+    }
+    function pushHistorySourceLabel(value) {
+      return {bilibili: 'B站', yysls: '燕云官网'}[value] || '测试消息';
+    }
+    async function refreshPushHistory() {
+      if (pushHistoryRequestInFlight) return;
+      pushHistoryRequestInFlight = true;
+      try {
+        var status = document.querySelector('#push-history-status').value;
+        var url = '/api/push-history?limit=200' + (status ? '&status=' + encodeURIComponent(status) : '');
+        var data = await api(url);
+        var counts = data.counts || {};
+        document.querySelector('#push-history-summary').textContent = '成功 ' + (counts.sent || 0) + ' · 失败 ' + (counts.failed || 0) + ' · 发送中 ' + (counts.processing || 0) + '（每 3 秒刷新）';
+        var items = data.items || [];
+        document.querySelector('#push-history-table').innerHTML = items.length ? items.map(function(item) {
+          var targetName = item.target_display_name || (item.scene_type === 'group' ? '未获取群名称' : '未获取昵称');
+          var messageInfo = item.qq_message_id
+            ? '<div class="primary-text">message_id：' + escapeHtml(item.qq_message_id) + '</div><div class="secondary-text">trace_id：' + escapeHtml(item.qq_trace_id || '--') + '</div>'
+            : '<span class="secondary-text">暂无消息 ID</span>';
+          var error = item.error ? '<div class="secondary-text">' + escapeHtml(item.error) + '</div>' : '';
+          return '<tr><td>' + formatDate(item.created_at) + '</td><td><div class="primary-text">' + escapeHtml(item.title || '未命名内容') + '</div><div class="secondary-text">' + escapeHtml(pushHistorySourceLabel(item.source_type)) + ' · 第 ' + escapeHtml(item.attempt_number || 1) + ' 次尝试</div></td><td><div class="primary-text">' + escapeHtml(targetName) + '</div><div class="secondary-text">' + escapeHtml(item.scene_type === 'group' ? '群聊' : '单聊') + ' · ' + escapeHtml(maskOpenId(item.target_openid)) + '</div></td><td>' + escapeHtml(pushHistoryTriggerLabel(item.trigger_type)) + '</td><td>' + chip(pushHistoryStatusLabel(item.status), pushHistoryStatusTone(item.status)) + error + '</td><td>' + messageInfo + '</td></tr>';
+        }).join('') : emptyRow(6, '暂无推送记录');
+      } catch (error) {
+        document.querySelector('#push-history-table').innerHTML = emptyRow(6, '加载失败：' + escapeHtml(error.message));
+      } finally {
+        pushHistoryRequestInFlight = false;
+      }
+    }
+    function startPushHistoryPolling() {
+      refreshPushHistory();
+      if (!pushHistoryTimer) {
+        pushHistoryTimer = window.setInterval(refreshPushHistory, 3000);
+      }
+    }
+    function stopPushHistoryPolling() {
+      if (pushHistoryTimer) {
+        window.clearInterval(pushHistoryTimer);
+        pushHistoryTimer = null;
+      }
     }
     function fillConfig(data) {
       var qq = data.qqbot || {};
@@ -696,6 +821,7 @@
         await api('/api/targets', {method: 'POST', body: JSON.stringify({
           scene_type: document.querySelector('#scene').value,
           target_openid: document.querySelector('#openid').value,
+          display_name: document.querySelector('#target-display-name').value,
           message_mode: document.querySelector('#message-mode').value
         })});
         event.target.reset();
@@ -847,6 +973,9 @@
     document.querySelector('#binding-form').addEventListener('submit', createBinding);
     document.querySelector('#binding-cancel-button').addEventListener('click', cancelBinding);
     document.querySelector('#poll-form').addEventListener('submit', savePoll);
+    document.querySelector('#logs-refresh-button').addEventListener('click', function() { refreshRuntimeLogs(true); });
+    document.querySelector('#push-history-refresh-button').addEventListener('click', refreshPushHistory);
+    document.querySelector('#push-history-status').addEventListener('change', refreshPushHistory);
     refreshDashboard();
   </script>
 </body>

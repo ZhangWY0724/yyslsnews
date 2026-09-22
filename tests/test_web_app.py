@@ -1,3 +1,4 @@
+import logging
 from unittest.mock import AsyncMock
 
 from cryptography.fernet import Fernet
@@ -9,8 +10,71 @@ from yysls_news.collectors.bilibili.client import BilibiliClient
 from yysls_news.config import Settings
 from yysls_news.delivery.qqbot.client import QQMessageResult
 from yysls_news.domain.models import MessageMode, NormalizedContent, SceneType, SourceType
+from yysls_news.security.passwords import hash_password
 from yysls_news.services.delivery import DeliveryWorker
 from yysls_news.web.app import create_app
+
+
+def _mark_admin_password_changed(context: ApplicationContext) -> None:
+    context.runtime_config.save_admin_password_hash(hash_password(context.settings.admin_password))
+
+
+def test_initial_admin_password_requires_change(tmp_path) -> None:
+    settings = Settings(
+        app_env="test",
+        database_path=tmp_path / "initial-password.db",
+        encryption_key=Fernet.generate_key().decode(),
+        admin_username="admin",
+        admin_password="initial-password",
+        host="127.0.0.1",
+        port=43100,
+        bilibili_poll_interval_seconds=300,
+        yysls_poll_interval_seconds=600,
+        http_timeout_seconds=5,
+        qqbot_api_base_url="https://api.bot.qq.com",
+        qqbot_app_id="",
+        qqbot_app_secret="",
+    )
+    app = create_app(ApplicationContext.create(settings))
+
+    with TestClient(app) as client:
+        page = client.get("/", auth=("admin", "initial-password"))
+        assert page.status_code == 200
+        assert "首次登录，请修改管理密码" in page.text
+
+        blocked = client.get("/api/dashboard", auth=("admin", "initial-password"))
+        assert blocked.status_code == 428
+
+        changed = client.post(
+            "/api/auth/password",
+            auth=("admin", "initial-password"),
+            json={"new_password": "new-password", "confirm_password": "new-password"},
+        )
+        assert changed.status_code == 200
+        assert changed.json() == {"changed": True}
+
+        assert client.get("/api/dashboard", auth=("admin", "initial-password")).status_code == 401
+        assert client.get("/api/dashboard", auth=("admin", "new-password")).status_code == 200
+        assert "系统总览" in client.get("/", auth=("admin", "new-password")).text
+
+        logging.getLogger("tests.runtime.logs").warning("运行日志测试记录")
+        logs = client.get("/api/logs", auth=("admin", "new-password"))
+        assert logs.status_code == 200
+        assert any(item["message"] == "运行日志测试记录" for item in logs.json()["items"])
+
+        history_id = app.state.context.push_history.create_attempt(
+            content_item_id=None,
+            delivery_target_id=None,
+            trigger_type="qqbot_test",
+            source_type="",
+            title="测试消息",
+            scene_type="group",
+            target_openid="group-openid",
+        )
+        app.state.context.push_history.mark_sent(history_id, "message-1", "trace-1")
+        history = client.get("/api/push-history?status=sent", auth=("admin", "new-password"))
+        assert history.status_code == 200
+        assert history.json()["items"][0]["qq_message_id"] == "message-1"
 
 
 def test_web_configures_subscription_target_and_qqbot(tmp_path, monkeypatch) -> None:
@@ -29,7 +93,9 @@ def test_web_configures_subscription_target_and_qqbot(tmp_path, monkeypatch) -> 
         qqbot_app_id="",
         qqbot_app_secret="",
     )
-    app = create_app(ApplicationContext.create(settings))
+    context = ApplicationContext.create(settings)
+    _mark_admin_password_changed(context)
+    app = create_app(context)
 
     async def fake_get_user_info(self, uid: int) -> dict[str, str]:
         return {"name": f"测试UP-{uid}"}
@@ -95,6 +161,7 @@ def test_web_configures_subscription_target_and_qqbot(tmp_path, monkeypatch) -> 
         assert "自动绑定目标" in html
         assert "已绑定目标" in html
         assert "测试推送" in html
+        assert "推送记录" in html
 
 
 def test_historical_content_test_push_uses_selected_target(tmp_path, monkeypatch) -> None:
@@ -114,6 +181,7 @@ def test_historical_content_test_push_uses_selected_target(tmp_path, monkeypatch
         qqbot_app_secret="",
     )
     context = ApplicationContext.create(settings)
+    _mark_admin_password_changed(context)
     context.runtime_config.save_qqbot("app", "secret")
     target_id = context.targets.upsert(
         SceneType.GROUP,
@@ -182,6 +250,7 @@ def test_bilibili_login_saves_and_exposes_username(tmp_path, monkeypatch) -> Non
         qqbot_app_secret="",
     )
     context = ApplicationContext.create(settings)
+    _mark_admin_password_changed(context)
     context.qr_login.poll = AsyncMock(
         return_value=LoginPollResult(
             session_id="test-session",
@@ -231,6 +300,7 @@ def test_bilibili_login_error_returns_readable_http_error(tmp_path) -> None:
         qqbot_app_secret="",
     )
     context = ApplicationContext.create(settings)
+    _mark_admin_password_changed(context)
     context.qr_login.poll = AsyncMock(side_effect=BilibiliLoginError("测试扫码错误"))
     app = create_app(context)
 

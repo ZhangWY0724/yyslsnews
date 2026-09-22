@@ -198,31 +198,52 @@ class QQBotGatewayListener:
         if event is None:
             return
         scene_type, code, target_openid = event
+        display_name = _extract_event_display_name(
+            str(payload.get("t") or ""), payload.get("d") or {}
+        )
         try:
-            result = self.bindings.consume(scene_type, code, target_openid)
+            result = self.bindings.consume(
+                scene_type,
+                code,
+                target_openid,
+                display_name=display_name,
+            )
         except Exception:
             LOGGER.exception("处理 QQ 绑定事件失败")
             return
         if result is None:
             return
         self._status["last_event_at"] = utc_now()
-        LOGGER.info("QQBot 绑定成功: scene=%s", result.scene_type.value)
+        client = QQBotClient(
+            config.base_url,
+            config.app_id,
+            config.app_secret,
+            timeout_seconds=self.timeout_seconds,
+        )
         try:
-            client = QQBotClient(
-                config.base_url,
-                config.app_id,
-                config.app_secret,
-                timeout_seconds=self.timeout_seconds,
+            if not display_name and scene_type is SceneType.GROUP:
+                try:
+                    group_info = await client.get_group_info(target_openid)
+                    display_name = _extract_display_name(group_info)
+                    if display_name:
+                        self.bindings.update_target_name(
+                            scene_type, target_openid, display_name
+                        )
+                except Exception as exc:
+                    LOGGER.info("读取 QQ 群名称失败: %s", type(exc).__name__)
+            LOGGER.info(
+                "QQBot 绑定成功: scene=%s name=%s",
+                result.scene_type.value,
+                display_name or "未获取名称",
             )
-            try:
-                await client.send_text(
-                    QQTarget(result.scene_type.value, result.target_openid),
-                    "绑定成功，后续资讯将推送到当前目标。",
-                )
-            finally:
-                await client.aclose()
+            await client.send_text(
+                QQTarget(result.scene_type.value, result.target_openid),
+                "绑定成功，后续资讯将推送到当前目标。",
+            )
         except (QQBotApiError, httpx.HTTPError) as exc:
             LOGGER.warning("QQBot 绑定成功确认消息发送失败: %s", type(exc).__name__)
+        finally:
+            await client.aclose()
 
     def _set_status(self, value: str, error: str = "") -> None:
         self._status["status"] = value
@@ -246,6 +267,31 @@ def _extract_binding_event(
         target_openid = str(data.get("group_openid") or "").strip()
         return (SceneType.GROUP, content, target_openid) if target_openid else None
     return None
+
+
+def _extract_event_display_name(event_name: str, data: dict[str, Any]) -> str:
+    if event_name == "C2C_MESSAGE_CREATE":
+        return _extract_display_name(data.get("author") or {})
+    if event_name in {"GROUP_AT_MESSAGE_CREATE", "GROUP_MESSAGE_CREATE"}:
+        return _extract_display_name(data)
+    return ""
+
+
+def _extract_display_name(data: dict[str, Any]) -> str:
+    for key in (
+        "group_name",
+        "group_name_str",
+        "nickname",
+        "nick_name",
+        "user_name",
+        "username",
+        "name",
+    ):
+        value = data.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    nested = data.get("data")
+    return _extract_display_name(nested) if isinstance(nested, dict) else ""
 
 
 async def _heartbeat(

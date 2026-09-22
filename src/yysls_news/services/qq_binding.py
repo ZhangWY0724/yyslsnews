@@ -84,6 +84,7 @@ class QQBindingService:
         scene_type: SceneType,
         code: str,
         target_openid: str,
+        display_name: str = "",
     ) -> QQBindingResult | None:
         normalized_code = code.strip().upper()
         if len(normalized_code) != 8 or any(
@@ -100,6 +101,7 @@ class QQBindingService:
         self.targets.upsert(
             scene_type=scene_type,
             target_openid=target_openid,
+            display_name=display_name,
             enabled=True,
             message_mode=message_mode,
             render_mode="playwright",
@@ -110,6 +112,12 @@ class QQBindingService:
             message_mode=message_mode,
             target_openid=target_openid,
         )
+
+    def update_target_name(
+        self, scene_type: SceneType, target_openid: str, display_name: str
+    ) -> None:
+        if display_name.strip():
+            self.targets.update_display_name(scene_type, target_openid, display_name)
 
 
 def _hash_code(code: str) -> str:

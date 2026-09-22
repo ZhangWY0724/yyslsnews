@@ -16,7 +16,7 @@ from yysls_news.delivery.qqbot.client import (
 from yysls_news.domain.models import MessageMode, SourceType
 from yysls_news.rendering.renderer import ImageRenderError, PlaywrightRenderer
 from yysls_news.services.runtime_config import RuntimeConfigService
-from yysls_news.storage.repositories import DeliveryTaskRepository
+from yysls_news.storage.repositories import DeliveryTaskRepository, PushHistoryRepository
 
 LOGGER = logging.getLogger(__name__)
 
@@ -27,12 +27,14 @@ class DeliveryWorker:
     def __init__(
         self,
         tasks: DeliveryTaskRepository,
+        push_history: PushHistoryRepository,
         runtime_config: RuntimeConfigService,
         image_renderer: PlaywrightRenderer,
         output_dir: str | Path = "./data/screenshots",
         max_attempts: int = 5,
     ) -> None:
         self.tasks = tasks
+        self.push_history = push_history
         self.runtime_config = runtime_config
         self.image_renderer = image_renderer
         self.output_dir = Path(output_dir)
@@ -59,11 +61,24 @@ class DeliveryWorker:
             if not self.tasks.mark_processing(int(task["id"])):
                 continue
             processed += 1
+            history_id = self.push_history.create_attempt(
+                content_item_id=int(task["content_item_id"]),
+                delivery_target_id=int(task["delivery_target_id"]),
+                trigger_type="scheduled",
+                source_type=str(task.get("source_type") or ""),
+                title=str(task.get("title") or ""),
+                scene_type=str(task["scene_type"]),
+                target_openid=str(task["target_openid"]),
+                target_display_name=str(task.get("target_display_name") or ""),
+                attempt_number=int(task.get("retry_count") or 0) + 1,
+            )
             try:
                 result = await self._send_task(client, task)
+                self.push_history.mark_sent(history_id, result.message_id, result.trace_id)
                 self.tasks.mark_sent(int(task["id"]), result.message_id, result.trace_id)
             except Exception as exc:
-                self._record_failure(task, exc)
+                message = self._record_failure(task, exc)
+                self.push_history.mark_failed(history_id, message)
         return processed
 
     async def send_test(
@@ -71,19 +86,38 @@ class DeliveryWorker:
         content: dict[str, Any],
         target: dict[str, Any],
     ) -> QQMessageResult:
-        """直接发送一条历史内容测试消息，不创建正式推送任务。"""
-        client = await self._get_client()
+        """直接发送一条历史内容测试消息，并记录推送结果。"""
         task = dict(content)
         task.update(
             {
                 "id": f"test-{uuid.uuid4().hex}",
+                "content_item_id": content.get("id"),
+                "delivery_target_id": target.get("id"),
                 "scene_type": target["scene_type"],
                 "target_openid": target["target_openid"],
+                "target_display_name": target.get("display_name") or "",
                 "message_mode": target.get("message_mode") or MessageMode.IMAGE.value,
                 "render_mode": target.get("render_mode") or "playwright",
             }
         )
-        return await self._send_task(client, task)
+        history_id = self.push_history.create_attempt(
+            content_item_id=_optional_int(task.get("content_item_id")),
+            delivery_target_id=_optional_int(task.get("delivery_target_id")),
+            trigger_type="historical_test",
+            source_type=str(task.get("source_type") or ""),
+            title=str(task.get("title") or ""),
+            scene_type=str(task["scene_type"]),
+            target_openid=str(task["target_openid"]),
+            target_display_name=str(task.get("target_display_name") or ""),
+        )
+        try:
+            client = await self._get_client()
+            result = await self._send_task(client, task)
+            self.push_history.mark_sent(history_id, result.message_id, result.trace_id)
+            return result
+        except Exception as exc:
+            self.push_history.mark_failed(history_id, _failure_message(exc))
+            raise
 
     async def run_forever(self, stop_event: Any = None) -> None:
         import asyncio
@@ -147,9 +181,9 @@ class DeliveryWorker:
         except QQBotApiError:
             return await client.send_text(target, _plain_text(task))
 
-    def _record_failure(self, task: dict[str, Any], exc: Exception) -> None:
+    def _record_failure(self, task: dict[str, Any], exc: Exception) -> str:
         retry_count = int(task.get("retry_count") or 0) + 1
-        message = f"{type(exc).__name__}: {exc}"[:500]
+        message = _failure_message(exc)
         retryable = not isinstance(exc, QQBotApiError) or exc.retryable
         if retryable and retry_count < self.max_attempts:
             self.tasks.mark_retry(
@@ -161,6 +195,18 @@ class DeliveryWorker:
         else:
             self.tasks.mark_failed(int(task["id"]), retry_count, message)
         LOGGER.warning("推送任务 %s 失败: %s", task["id"], str(exc)[:500])
+        return message
+
+
+def _failure_message(exc: Exception) -> str:
+    return f"{type(exc).__name__}: {exc}"[:500]
+
+
+def _optional_int(value: Any) -> int | None:
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
 
 
 def _payload(task: dict[str, Any]) -> dict[str, Any]:

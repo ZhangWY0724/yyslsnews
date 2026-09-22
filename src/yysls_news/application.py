@@ -12,6 +12,7 @@ from yysls_news.services.credentials import CredentialService
 from yysls_news.services.ingestion import MonitorService
 from yysls_news.services.qq_binding import QQBindingService
 from yysls_news.services.runtime_config import RuntimeConfigService
+from yysls_news.services.runtime_logs import RuntimeLogBuffer
 from yysls_news.storage.database import Database
 from yysls_news.storage.repositories import (
     AppSettingsRepository,
@@ -20,6 +21,7 @@ from yysls_news.storage.repositories import (
     CredentialRepository,
     DeliveryTargetRepository,
     DeliveryTaskRepository,
+    PushHistoryRepository,
     QQBindingRepository,
     WatchSourceRepository,
 )
@@ -37,7 +39,9 @@ class ApplicationContext:
     contents: ContentRepository
     targets: DeliveryTargetRepository
     tasks: DeliveryTaskRepository
+    push_history: PushHistoryRepository
     runtime_config: RuntimeConfigService
+    runtime_logs: RuntimeLogBuffer
     qq_bindings: QQBindingService
     qq_listener: QQBotGatewayListener
     qr_login: BilibiliQrLoginClient
@@ -54,6 +58,7 @@ class ApplicationContext:
         sources = WatchSourceRepository(database)
         targets = DeliveryTargetRepository(database)
         runtime_config = RuntimeConfigService(settings, app_settings, secret_box)
+        runtime_logs = RuntimeLogBuffer()
         qq_bindings = QQBindingService(
             repository=QQBindingRepository(database),
             targets=targets,
@@ -79,7 +84,9 @@ class ApplicationContext:
             contents=ContentRepository(database),
             targets=targets,
             tasks=DeliveryTaskRepository(database),
+            push_history=PushHistoryRepository(database),
             runtime_config=runtime_config,
+            runtime_logs=runtime_logs,
             qq_bindings=qq_bindings,
             qq_listener=QQBotGatewayListener(
                 runtime_config=runtime_config,

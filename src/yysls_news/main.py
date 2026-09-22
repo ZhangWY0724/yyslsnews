@@ -112,6 +112,7 @@ async def _run_all(context: ApplicationContext) -> None:
 def _create_delivery_worker(context: ApplicationContext) -> DeliveryWorker:
     return DeliveryWorker(
         tasks=context.tasks,
+        push_history=context.push_history,
         runtime_config=context.runtime_config,
         image_renderer=PlaywrightRenderer(
             timeout_ms=int(context.settings.http_timeout_seconds * 1000)

@@ -145,6 +145,9 @@ class QQBotClient:
         )
         return self._message_result(payload)
 
+    async def get_group_info(self, group_openid: str) -> dict[str, Any]:
+        return await self._request("GET", f"/v2/groups/{group_openid}/info")
+
     async def upload_image(self, target: QQTarget, file_path: str | Path) -> str:
         path = Path(file_path)
         if not path.is_file():

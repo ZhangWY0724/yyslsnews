@@ -83,6 +83,7 @@ CREATE TABLE IF NOT EXISTS delivery_targets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     scene_type TEXT NOT NULL,
     target_openid TEXT NOT NULL,
+    display_name TEXT NOT NULL DEFAULT '',
     enabled INTEGER NOT NULL DEFAULT 1,
     message_mode TEXT NOT NULL DEFAULT 'image',
     render_mode TEXT NOT NULL DEFAULT 'playwright',
@@ -121,6 +122,31 @@ CREATE TABLE IF NOT EXISTS delivery_tasks (
     UNIQUE(content_item_id, delivery_target_id)
 );
 
+CREATE TABLE IF NOT EXISTS push_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    content_item_id INTEGER REFERENCES content_items(id),
+    delivery_target_id INTEGER REFERENCES delivery_targets(id),
+    trigger_type TEXT NOT NULL DEFAULT 'scheduled',
+    source_type TEXT NOT NULL DEFAULT '',
+    title TEXT NOT NULL DEFAULT '',
+    scene_type TEXT NOT NULL,
+    target_openid TEXT NOT NULL,
+    target_display_name TEXT NOT NULL DEFAULT '',
+    attempt_number INTEGER NOT NULL DEFAULT 1,
+    status TEXT NOT NULL DEFAULT 'processing',
+    qq_message_id TEXT NOT NULL DEFAULT '',
+    qq_trace_id TEXT NOT NULL DEFAULT '',
+    error TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    finished_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_push_history_created_at
+    ON push_history(created_at DESC, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_push_history_status
+    ON push_history(status, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS poll_runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     source_type TEXT NOT NULL,
@@ -142,6 +168,18 @@ class Database:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as connection:
             connection.executescript(SCHEMA)
+            self._migrate_delivery_target_name(connection)
+
+    @staticmethod
+    def _migrate_delivery_target_name(connection: sqlite3.Connection) -> None:
+        columns = {
+            str(row["name"])
+            for row in connection.execute("PRAGMA table_info(delivery_targets)").fetchall()
+        }
+        if "display_name" not in columns:
+            connection.execute(
+                "ALTER TABLE delivery_targets ADD COLUMN display_name TEXT NOT NULL DEFAULT ''"
+            )
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:

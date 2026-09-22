@@ -36,6 +36,7 @@ git "${git_args[@]}" pull --ff-only
 
 log "更新 Python 依赖"
 "${VENV_DIR}/bin/python" -m pip install --no-cache-dir -e "${PROJECT_DIR}"
+chown -R "${SERVICE_USER}:${SERVICE_USER}" "${VENV_DIR}"
 
 log "同步 Playwright Chromium"
 PLAYWRIGHT_BROWSERS_PATH="${PROJECT_DIR}/.playwright" \

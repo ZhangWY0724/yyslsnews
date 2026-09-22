@@ -284,16 +284,21 @@ class DeliveryTargetRepository:
         enabled: bool = True,
         message_mode: MessageMode = MessageMode.IMAGE,
         render_mode: str = "playwright",
+        display_name: str = "",
     ) -> int:
         now = utc_now()
         with self.database.connect() as connection:
             connection.execute(
                 """
                 INSERT INTO delivery_targets(
-                    scene_type, target_openid, enabled, message_mode,
+                    scene_type, target_openid, display_name, enabled, message_mode,
                     render_mode, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(scene_type, target_openid) DO UPDATE SET
+                    display_name = CASE
+                        WHEN excluded.display_name <> '' THEN excluded.display_name
+                        ELSE delivery_targets.display_name
+                    END,
                     enabled=excluded.enabled,
                     message_mode=excluded.message_mode,
                     render_mode=excluded.render_mode,
@@ -302,6 +307,7 @@ class DeliveryTargetRepository:
                 (
                     scene_type.value,
                     target_openid,
+                    display_name.strip(),
                     int(enabled),
                     message_mode.value,
                     render_mode,
@@ -316,6 +322,19 @@ class DeliveryTargetRepository:
         if row is None:
             raise RuntimeError("保存推送目标后未找到记录")
         return int(row["id"])
+
+    def update_display_name(
+        self, scene_type: SceneType, target_openid: str, display_name: str
+    ) -> None:
+        with self.database.connect() as connection:
+            connection.execute(
+                """
+                UPDATE delivery_targets
+                SET display_name = ?, updated_at = ?
+                WHERE scene_type = ? AND target_openid = ?
+                """,
+                (display_name.strip(), utc_now(), scene_type.value, target_openid),
+            )
 
     def list_all(self) -> list[dict[str, Any]]:
         with self.database.connect() as connection:
@@ -548,6 +567,7 @@ class DeliveryTaskRepository:
                        content_items.raw_payload_json, content_items.source_url,
                        content_items.content_html,
                        delivery_targets.scene_type, delivery_targets.target_openid,
+                       delivery_targets.display_name AS target_display_name,
                        delivery_targets.message_mode, delivery_targets.render_mode
                 FROM delivery_tasks AS task
                 JOIN content_items ON content_items.id = task.content_item_id
@@ -611,5 +631,91 @@ class DeliveryTaskRepository:
         with self.database.connect() as connection:
             rows = connection.execute(
                 "SELECT status, COUNT(*) AS total FROM delivery_tasks GROUP BY status"
+            ).fetchall()
+        return {str(row["status"]): int(row["total"]) for row in rows}
+
+
+class PushHistoryRepository:
+    """记录每一次实际推送尝试，供管理页面查询历史结果。"""
+
+    def __init__(self, database: Database) -> None:
+        self.database = database
+
+    def create_attempt(
+        self,
+        *,
+        content_item_id: int | None,
+        delivery_target_id: int | None,
+        trigger_type: str,
+        source_type: str,
+        title: str,
+        scene_type: str,
+        target_openid: str,
+        target_display_name: str = "",
+        attempt_number: int = 1,
+    ) -> int:
+        with self.database.connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO push_history(
+                    content_item_id, delivery_target_id, trigger_type, source_type,
+                    title, scene_type, target_openid, target_display_name,
+                    attempt_number, status, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'processing', ?)
+                """,
+                (
+                    content_item_id,
+                    delivery_target_id,
+                    trigger_type,
+                    source_type,
+                    title,
+                    scene_type,
+                    target_openid,
+                    target_display_name,
+                    max(attempt_number, 1),
+                    utc_now(),
+                ),
+            )
+        return int(cursor.lastrowid)
+
+    def mark_sent(self, history_id: int, message_id: str, trace_id: str = "") -> None:
+        with self.database.connect() as connection:
+            connection.execute(
+                """
+                UPDATE push_history
+                SET status = 'sent', qq_message_id = ?, qq_trace_id = ?,
+                    error = '', finished_at = ?
+                WHERE id = ?
+                """,
+                (message_id, trace_id, utc_now(), history_id),
+            )
+
+    def mark_failed(self, history_id: int, error: str) -> None:
+        with self.database.connect() as connection:
+            connection.execute(
+                """
+                UPDATE push_history
+                SET status = 'failed', error = ?, finished_at = ?
+                WHERE id = ?
+                """,
+                (error[:1000], utc_now(), history_id),
+            )
+
+    def list_recent(self, limit: int = 100, status: str | None = None) -> list[dict[str, Any]]:
+        query = "SELECT * FROM push_history"
+        parameters: list[Any] = []
+        if status:
+            query += " WHERE status = ?"
+            parameters.append(status)
+        query += " ORDER BY created_at DESC, id DESC LIMIT ?"
+        parameters.append(max(1, min(limit, 500)))
+        with self.database.connect() as connection:
+            rows = connection.execute(query, parameters).fetchall()
+        return [dict(row) for row in rows]
+
+    def count_by_status(self) -> dict[str, int]:
+        with self.database.connect() as connection:
+            rows = connection.execute(
+                "SELECT status, COUNT(*) AS total FROM push_history GROUP BY status"
             ).fetchall()
         return {str(row["status"]): int(row["total"]) for row in rows}
