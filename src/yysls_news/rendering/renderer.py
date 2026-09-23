@@ -14,14 +14,7 @@ class ImageRenderError(RuntimeError):
 class PlaywrightRenderer:
     """按需打开详情页，截取 B站动态或官网新闻正文。"""
 
-    def __init__(
-        self,
-        viewport_width: int = 1080,
-        viewport_height: int = 900,
-        timeout_ms: int = 20_000,
-    ) -> None:
-        self.viewport_width = viewport_width
-        self.viewport_height = viewport_height
+    def __init__(self, timeout_ms: int = 20_000) -> None:
         self.timeout_ms = timeout_ms
 
     async def render_bilibili(
@@ -34,7 +27,6 @@ class PlaywrightRenderer:
             source_url,
             Path(output_path).with_suffix(".jpg"),
             selector=".bili-opus-view, .bili-dyn-detail__content",
-            viewport_width=1280,
             hide_css=".bili-header__menu, .login-tip { display: none !important; }",
             require_images=True,
         )
@@ -45,14 +37,19 @@ class PlaywrightRenderer:
         source_url = source_url.strip()
         if not source_url:
             raise ImageRenderError("官网新闻缺少原文地址")
-        return await self.capture_url(source_url, output_path, selector="#NIE-art")
+        return await self.capture_url(
+            source_url,
+            output_path,
+            selector=".container-all.news",
+            image_root_selector="#NIE-art",
+        )
 
     async def capture_url(
         self,
         url: str,
         output_path: str | Path,
         selector: str = "#NIE-art",
-        viewport_width: int | None = None,
+        image_root_selector: str | None = None,
         hide_css: str = "",
         require_images: bool = False,
     ) -> Path:
@@ -70,14 +67,13 @@ class PlaywrightRenderer:
                 browser = await playwright.chromium.launch(headless=True)
                 try:
                     page = await browser.new_page(
-                        viewport={
-                            "width": viewport_width or self.viewport_width,
-                            "height": self.viewport_height,
-                        },
+                        viewport={"width": 1920, "height": 1080},
                         device_scale_factor=1,
                     )
                     response = await page.goto(
-                        url, wait_until="commit", timeout=max(self.timeout_ms, 30_000)
+                        url,
+                        wait_until="domcontentloaded",
+                        timeout=max(self.timeout_ms, 30_000),
                     )
                     if (response is None and url.startswith(("http://", "https://"))) or (
                         response is not None and response.status >= 400
@@ -86,6 +82,8 @@ class PlaywrightRenderer:
                     article = page.locator(selector).first
                     await article.wait_for(state="visible", timeout=self.timeout_ms)
                     await self._scroll_article(page, article)
+                    # 等待网页字体就绪，避免在自定义字体加载前截到回退字体。
+                    await page.evaluate("() => document.fonts.ready")
                     try:
                         await page.wait_for_function(
                             """selector => {
@@ -93,7 +91,7 @@ class PlaywrightRenderer:
                                 return root && Array.from(root.querySelectorAll('img'))
                                     .every(image => image.complete && image.naturalWidth > 0);
                             }""",
-                            arg=selector,
+                            arg=image_root_selector or selector,
                             timeout=self.timeout_ms,
                         )
                     except PlaywrightTimeoutError as exc:
