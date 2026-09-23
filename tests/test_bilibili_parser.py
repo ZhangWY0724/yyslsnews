@@ -1,5 +1,4 @@
 from yysls_news.collectors.bilibili.parser import (
-    content_to_html,
     content_to_text,
     extract_new_items,
     matches_filters,
@@ -59,7 +58,7 @@ def test_parse_video_dynamic_to_normalized_content() -> None:
     assert normalized.external_id == "123"
     assert normalized.title == "新视频"
     assert normalized.category == "视频"
-    assert normalized.render_payload["video_url"].endswith("BV1xx")
+    assert normalized.source_url == "https://t.bilibili.com/123"
     assert matches_filters(model, [], [])
     assert not matches_filters(model, ["视频"], [])
 
@@ -86,7 +85,6 @@ def test_parse_structured_desc_text_without_rendering_the_api_dict() -> None:
 
     assert model is not None
     assert model.content == "12312"
-    assert model.images == ("https://i.example/legacy-draw.png",)
     assert "rich_text_nodes" not in model.content
     paragraphs = {"paragraphs": [{"text": "第一段"}, {"text": "第二段"}]}
     assert content_to_text(paragraphs) == "第一段\n第二段"
@@ -97,35 +95,14 @@ def test_parse_structured_desc_text_without_rendering_the_api_dict() -> None:
     assert content_to_text(legacy_text) == "12312"
 
 
-def test_parse_opus_summary_renders_emoji_topic_and_pendant_fields() -> None:
+def test_parse_opus_summary_for_filter() -> None:
     item = _item("opus", "DYNAMIC_TYPE_DRAW", "")
-    item["modules"]["module_author"]["pendant"] = {
-        "image": "https://i.example/pendant.png"
-    }
     item["modules"]["module_dynamic"].update(
         {
-            "topic": {
-                "name": "日常分享",
-                "jump_url": "//search.bilibili.com/all?keyword=日常分享",
-            },
             "major": {
                 "opus": {
                     "title": "今日分享",
-                    "summary": {
-                        "text": "[doge] 看看这个",
-                        "rich_text_nodes": [
-                            {
-                                "type": "RICH_TEXT_NODE_TYPE_EMOJI",
-                                "text": "[doge]",
-                                "emoji": {
-                                    "text": "[doge]",
-                                    "icon_url": "https://i.example/doge.png",
-                                },
-                            }
-                        ],
-                        "paragraphs": [],
-                    },
-                    "pics": [{"url": "//i.example/picture.png"}],
+                    "summary": {"text": "[doge] 看看这个"},
                 }
             },
         }
@@ -135,11 +112,7 @@ def test_parse_opus_summary_renders_emoji_topic_and_pendant_fields() -> None:
 
     assert model is not None
     assert model.title == "今日分享"
-    assert model.images == ("https://i.example/picture.png",)
-    assert model.pendant_url == "https://i.example/pendant.png"
-    assert 'class="rich-emoji"' in model.content_html
-    assert 'href="https://search.bilibili.com/all?keyword=日常分享"' in model.content_html
-    assert content_to_html({"text": "<script>"}) == "&lt;script&gt;"
+    assert model.content == "[doge] 看看这个"
 
 
 def test_parse_word_and_article_use_their_type_specific_fallback_fields() -> None:
@@ -179,11 +152,7 @@ def test_parse_forward_keeps_outer_comment_and_recursively_parses_original() -> 
     model = parse_dynamic(forwarded, 42)
 
     assert model is not None
-    assert model.content == "转发时写的评论"
-    assert model.forward_content is not None
-    assert model.forward_content["title"] == "原动态标题"
-    assert model.forward_content["content"] == "原动态正文"
-    assert model.forward_content["images"] == ["https://i.example/original.png"]
+    assert model.content == "转发时写的评论\n原动态标题\n原动态正文"
 
 
 def test_parse_unknown_dynamic_type_without_generating_blank_content() -> None:

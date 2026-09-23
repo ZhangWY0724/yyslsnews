@@ -1,1 +1,1 @@
-"""HTML 模板与 Playwright 图片渲染。"""
+"""Playwright 详情页截图。"""

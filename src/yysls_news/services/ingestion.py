@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -15,7 +14,7 @@ from yysls_news.collectors.bilibili.parser import (
     to_normalized_content,
 )
 from yysls_news.collectors.yysls.client import YyslsClient
-from yysls_news.domain.models import PollResult, SourceType
+from yysls_news.domain.models import NormalizedContent, PollResult, SourceType
 from yysls_news.services.credentials import CredentialService
 from yysls_news.storage.repositories import (
     BilibiliSubscriptionRepository,
@@ -141,8 +140,16 @@ class YyslsIngestionService:
                     continue
                 discovered += 1
                 try:
-                    content = await self.client.fetch_article(list_item.url, list_item)
-                    content = replace(content, source_key=source_key)
+                    content = NormalizedContent(
+                        source_type=SourceType.YYSLS,
+                        source_key=source_key,
+                        external_id=list_item.url,
+                        title=list_item.title,
+                        author="燕云十六声官网",
+                        category=list_item.category,
+                        source_url=list_item.url,
+                        published_at=list_item.published_at,
+                    )
                     _, was_inserted, task_count = self.contents.insert_with_outbox(
                         content, create_tasks=not bootstrap
                     )

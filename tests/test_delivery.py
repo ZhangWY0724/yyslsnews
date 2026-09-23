@@ -11,14 +11,12 @@ from yysls_news.services.delivery import DeliveryWorker
 
 def _settings(database_path) -> Settings:
     return Settings(
-        app_env="test",
         database_path=database_path,
         encryption_key=Fernet.generate_key().decode(),
         admin_username="admin",
         admin_password="password",
         host="127.0.0.1",
         port=43100,
-        bilibili_poll_interval_seconds=300,
         yysls_poll_interval_seconds=600,
         http_timeout_seconds=5,
         qqbot_api_base_url="https://api.bot.qq.com",
@@ -32,9 +30,7 @@ def _content() -> dict[str, object]:
         "id": None,
         "source_type": SourceType.BILIBILI.value,
         "title": "历史动态",
-        "content_text": "动态内容",
         "source_url": "https://example.com/content/10",
-        "render_payload_json": "{}",
     }
 
 
@@ -45,7 +41,6 @@ def _target() -> dict[str, object]:
         "target_openid": "group-openid",
         "display_name": "测试群",
         "message_mode": MessageMode.TEXT.value,
-        "render_mode": "playwright",
     }
 
 

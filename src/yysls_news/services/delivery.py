@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -14,7 +13,7 @@ from yysls_news.delivery.qqbot.client import (
     QQTarget,
 )
 from yysls_news.domain.models import MessageMode, SourceType
-from yysls_news.rendering.renderer import ImageRenderError, PlaywrightRenderer
+from yysls_news.rendering.renderer import PlaywrightRenderer
 from yysls_news.services.runtime_config import RuntimeConfigService
 from yysls_news.storage.repositories import DeliveryTaskRepository, PushHistoryRepository
 
@@ -97,7 +96,6 @@ class DeliveryWorker:
                 "target_openid": target["target_openid"],
                 "target_display_name": target.get("display_name") or "",
                 "message_mode": target.get("message_mode") or MessageMode.IMAGE.value,
-                "render_mode": target.get("render_mode") or "playwright",
             }
         )
         history_id = self.push_history.create_attempt(
@@ -156,22 +154,37 @@ class DeliveryWorker:
         if mode is MessageMode.IMAGE:
             try:
                 return await self._send_image(client, target, task)
-            except ImageRenderError:
-                LOGGER.warning("任务 %s 图片渲染失败，回退 Markdown", task.get("id", "test"))
-                return await self._send_markdown_or_text(client, target, task)
+            except Exception as exc:
+                LOGGER.warning(
+                    "任务 %s 图片推送失败，改发原文链接: %s",
+                    task.get("id", "test"),
+                    type(exc).__name__,
+                )
+                return await client.send_text(target, _plain_text(task))
         if mode is MessageMode.MARKDOWN:
             return await self._send_markdown_or_text(client, target, task)
         return await client.send_text(target, _plain_text(task))
 
     async def _send_image(self, client: QQBotClient, target: QQTarget, task: dict[str, Any]):
-        payload = _payload(task)
         output = self.output_dir / f"task-{task.get('id', uuid.uuid4().hex)}.png"
         source_type = str(task["source_type"])
-        if source_type == SourceType.BILIBILI.value:
-            output = await self.image_renderer.render_bilibili(payload, output)
-        else:
-            output = await self.image_renderer.render_yysls(payload, output)
-        return await client.send_image(target, output)
+        image_path = (
+            output.with_suffix(".jpg")
+            if source_type == SourceType.BILIBILI.value
+            else output
+        )
+        try:
+            source_url = str(task.get("source_url") or "")
+            if source_type == SourceType.BILIBILI.value:
+                image_path = await self.image_renderer.render_bilibili(source_url, image_path)
+            else:
+                image_path = await self.image_renderer.render_yysls(source_url, image_path)
+            return await client.send_image(target, image_path)
+        finally:
+            try:
+                image_path.unlink(missing_ok=True)
+            except OSError as exc:
+                LOGGER.warning("临时截图清理失败: %s", type(exc).__name__)
 
     async def _send_markdown_or_text(
         self, client: QQBotClient, target: QQTarget, task: dict[str, Any]
@@ -209,26 +222,16 @@ def _optional_int(value: Any) -> int | None:
         return None
 
 
-def _payload(task: dict[str, Any]) -> dict[str, Any]:
-    try:
-        value = json.loads(str(task.get("render_payload_json") or "{}"))
-        return value if isinstance(value, dict) else {}
-    except json.JSONDecodeError:
-        return {}
-
-
 def _markdown(task: dict[str, Any]) -> str:
     title = str(task.get("title") or "资讯更新")
-    content = str(task.get("content_text") or "")
     source_url = str(task.get("source_url") or "")
-    return f"## {title}\n\n{content}\n\n[查看原文]({source_url})"
+    return f"## {title}已更新\n\n[点击查看]({source_url})"
 
 
 def _plain_text(task: dict[str, Any]) -> str:
     title = str(task.get("title") or "资讯更新")
-    content = str(task.get("content_text") or "")
     source_url = str(task.get("source_url") or "")
-    return f"{title}\n\n{content}\n\n原文：{source_url}".strip()
+    return f"{title}已更新，点击查看：\n{source_url}"
 
 
 def _retry_at(retry_count: int) -> str:

@@ -19,14 +19,12 @@ def _int_env(name: str, default: int, minimum: int = 0) -> int:
 
 @dataclass(frozen=True)
 class Settings:
-    app_env: str
     database_path: Path
     encryption_key: str
     admin_username: str
     admin_password: str
     host: str
     port: int
-    bilibili_poll_interval_seconds: int
     yysls_poll_interval_seconds: int
     http_timeout_seconds: float
     qqbot_api_base_url: str
@@ -39,16 +37,12 @@ class Settings:
             load_dotenv(dotenv_path=env_file, override=False)
 
         return cls(
-            app_env=os.getenv("APP_ENV", "development"),
             database_path=Path(os.getenv("DATABASE_PATH", "./data/yysls_news.db")),
             encryption_key=os.getenv("APP_ENCRYPTION_KEY", ""),
             admin_username=os.getenv("ADMIN_USERNAME", "admin"),
             admin_password=os.getenv("ADMIN_PASSWORD", ""),
             host=os.getenv("HOST", "127.0.0.1"),
             port=_int_env("PORT", 43100, minimum=1),
-            bilibili_poll_interval_seconds=_int_env(
-                "BILIBILI_POLL_INTERVAL_SECONDS", 300, minimum=60
-            ),
             yysls_poll_interval_seconds=_int_env("YYSLS_POLL_INTERVAL_SECONDS", 600, minimum=60),
             http_timeout_seconds=float(os.getenv("HTTP_TIMEOUT_SECONDS", "20")),
             qqbot_api_base_url=os.getenv("QQBOT_API_BASE_URL", "https://api.bot.qq.com").rstrip(

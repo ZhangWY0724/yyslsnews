@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any
 
 
 class SourceType(str, Enum):
@@ -36,18 +35,10 @@ class BiliDynamicViewModel:
     dynamic_type: str
     uid: int
     author_name: str = ""
-    avatar_url: str = ""
     publish_time: datetime | None = None
     title: str = ""
     content: str = ""
-    content_html: str = ""
-    images: tuple[str, ...] = ()
-    video_cover: str = ""
-    video_url: str = ""
-    pendant_url: str = ""
-    forward_content: dict[str, Any] | None = None
     source_url: str = ""
-    raw_payload: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -58,23 +49,8 @@ class NormalizedContent:
     title: str
     author: str
     category: str
-    content_text: str
-    content_html: str
     source_url: str
     published_at: datetime | None
-    render_payload: dict[str, Any]
-    raw_payload: dict[str, Any]
-
-
-@dataclass(frozen=True)
-class DeliveryTarget:
-    id: int | None
-    scene_type: SceneType
-    target_openid: str
-    display_name: str = ""
-    enabled: bool = True
-    message_mode: MessageMode = MessageMode.IMAGE
-    render_mode: str = "playwright"
 
 
 @dataclass(frozen=True)

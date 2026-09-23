@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from dataclasses import asdict, dataclass
 
 from yysls_news.config import Settings
@@ -8,7 +7,6 @@ from yysls_news.security.secrets import SecretBox
 from yysls_news.storage.repositories import AppSettingsRepository
 
 QQBOT_CONFIG_KEY = "qqbot_config"
-POLL_CONFIG_KEY = "poll_config"
 ADMIN_PASSWORD_HASH_KEY = "admin_password_hash"
 
 
@@ -76,46 +74,6 @@ class RuntimeConfigService:
             "app_secret": _mask(config.app_secret),
             "configured": bool(config.app_id and config.app_secret),
         }
-
-    def poll_defaults(self) -> dict[str, int]:
-        raw = self.repository.get(POLL_CONFIG_KEY)
-        if raw:
-            try:
-                data = json.loads(raw)
-                return {
-                    "bilibili_poll_interval_seconds": max(
-                        int(
-                            data.get(
-                                "bilibili_poll_interval_seconds",
-                                self.settings.bilibili_poll_interval_seconds,
-                            )
-                        ),
-                        60,
-                    ),
-                    "yysls_poll_interval_seconds": max(
-                        int(
-                            data.get(
-                                "yysls_poll_interval_seconds",
-                                self.settings.yysls_poll_interval_seconds,
-                            )
-                        ),
-                        60,
-                    ),
-                }
-            except (TypeError, ValueError, json.JSONDecodeError):
-                pass
-        return {
-            "bilibili_poll_interval_seconds": self.settings.bilibili_poll_interval_seconds,
-            "yysls_poll_interval_seconds": self.settings.yysls_poll_interval_seconds,
-        }
-
-    def save_poll_defaults(self, bilibili_seconds: int, yysls_seconds: int) -> dict[str, int]:
-        values = {
-            "bilibili_poll_interval_seconds": max(int(bilibili_seconds), 60),
-            "yysls_poll_interval_seconds": max(int(yysls_seconds), 60),
-        }
-        self.repository.set(POLL_CONFIG_KEY, json.dumps(values, separators=(",", ":")))
-        return values
 
     def admin_password_hash(self) -> str:
         return self.repository.get(ADMIN_PASSWORD_HASH_KEY)

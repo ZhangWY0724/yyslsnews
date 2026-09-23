@@ -104,7 +104,6 @@ class QQBindingService:
             display_name=display_name,
             enabled=True,
             message_mode=message_mode,
-            render_mode="playwright",
         )
         return QQBindingResult(
             id=int(row["id"]),

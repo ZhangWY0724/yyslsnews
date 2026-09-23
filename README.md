@@ -4,14 +4,16 @@ B站指定 UP 主动态与燕云十六声官网新闻监控，并通过 QQ 官�
 
 ## 当前实现
 
-- B站使用 `bilibili-api-python` 获取结构化动态，不访问 B站动态网页截图。
+- B站使用 `bilibili-api-python` 发现和去重动态，由 Playwright 截取动态详情页正文为单张长图。
 - 管理页面支持 B站扫码登录，Credential 使用 Fernet 加密保存，Worker 低频检查和刷新登录态。
-- 官网从公开新闻列表发现文章，再由 Playwright 打开详情页并截取 `#NIE-art` 原始内容容器；失败时使用同一 Playwright 引擎渲染本地 HTML 模板。
-- B站使用结构化数据套用本地 HTML 模板，再由 Playwright 截图；两类来源统一使用同一个图片渲染器。
+- 官网从公开新闻列表发现文章并保存详情 URL；推送时由 Playwright 打开详情页并截取 `#NIE-art` 原始内容容器。
+- 只保存标题、来源、URL 等采集元数据，不持久化动态正文或文章 HTML。动态文字仅在采集时用于关键词筛选。
+- 截图、图片上传或图片消息发送失败时，直接发送“标题已更新，点击查看：原文 URL”的纯文本消息。
 - 内容和推送任务使用 SQLite Outbox 事务入库，支持游标、去重、重试和失败记录。
+- 已有数据库启动时会移除旧版正文及闲置字段；官网分页误采集的待推送任务会标记失败，无关联记录的分页内容会清理。
 - QQBot 使用 AppID/AppSecret 自动获取 AccessToken；图片先上传 `file_info`，再发送 `msg_type=7`。
 - QQBot Gateway 监听单聊和群聊 @ 事件，支持通过一次性绑定码自动识别 `user_openid`/`group_openid`。
-- 管理页面支持 UP、官网来源、QQBot 配置、自动绑定目标、群聊/单聊 OpenID、目标名称、消息模式、轮询间隔、实时运行日志和历史推送记录。
+- 管理页面支持 UP、官网来源、QQBot 配置、自动绑定目标、群聊/单聊 OpenID、目标名称、消息模式、各来源轮询间隔、实时运行日志和历史推送记录。
 
 ## 启动
 
@@ -62,7 +64,7 @@ Copy-Item ".env.example" ".env"
 & ".venv\Scripts\ruff.exe" check "src" "tests"
 ```
 
-当前测试只覆盖解析、去重、加密、数据库 Outbox、Playwright 本地模板截图、QQBot 请求构造和管理接口，不会代替真实 B站扫码、官网网络访问或 QQBot 发送联调。
+当前测试只覆盖解析、去重、加密、数据库 Outbox、Playwright 容器截图、QQBot 请求构造和管理接口，不会代替真实 B站扫码、动态详情页截图或 QQBot 发送联调。
 
 ## Linux 部署
 

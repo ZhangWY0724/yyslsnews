@@ -78,7 +78,6 @@ if [[ ! -f "${CONFIG_FILE}" ]]; then
     encryption_key="$(${VENV_DIR}/bin/python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
     admin_password="$(${VENV_DIR}/bin/python -c 'import secrets; print(secrets.token_urlsafe(18))')"
     cat >"${CONFIG_FILE}" <<EOF
-APP_ENV=production
 DATABASE_PATH=${PROJECT_DIR}/data/yysls_news.db
 APP_ENCRYPTION_KEY=${encryption_key}
 ADMIN_USERNAME=admin
@@ -86,7 +85,6 @@ ADMIN_PASSWORD=${admin_password}
 HOST=127.0.0.1
 PORT=43100
 
-BILIBILI_POLL_INTERVAL_SECONDS=300
 YYSLS_POLL_INTERVAL_SECONDS=600
 HTTP_TIMEOUT_SECONDS=20
 

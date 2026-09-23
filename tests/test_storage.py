@@ -19,12 +19,8 @@ def _content(external_id: str = "1") -> NormalizedContent:
         title="标题",
         author="UP",
         category="文字",
-        content_text="内容",
-        content_html="<p>内容</p>",
         source_url="https://t.bilibili.com/1",
         published_at=datetime.now(timezone.utc),
-        render_payload={"title": "标题", "content": "内容"},
-        raw_payload={"id_str": external_id},
     )
 
 

@@ -49,18 +49,12 @@ class DeliveryTargetInput(BaseModel):
     display_name: str = Field(default="", max_length=200)
     enabled: bool = True
     message_mode: MessageMode = MessageMode.IMAGE
-    render_mode: str = Field(default="playwright", pattern="^playwright$")
 
 
 class QQBotConfigInput(BaseModel):
     app_id: str = Field(min_length=1, max_length=100)
     app_secret: str = ""
     base_url: str | None = None
-
-
-class PollConfigInput(BaseModel):
-    bilibili_poll_interval_seconds: int = Field(ge=60)
-    yysls_poll_interval_seconds: int = Field(ge=60)
 
 
 class LoginPollInput(BaseModel):
@@ -217,7 +211,6 @@ def create_app(context: ApplicationContext | None = None) -> FastAPI:
             "recent_contents": context.contents.list_recent(20),
             "qqbot": context.runtime_config.qqbot_public(),
             "qq_listener": context.qq_listener.status(),
-            "poll_defaults": context.runtime_config.poll_defaults(),
         }
 
     @app.get("/api/bilibili/subscriptions")
@@ -440,7 +433,6 @@ def create_app(context: ApplicationContext | None = None) -> FastAPI:
             display_name=payload.display_name,
             enabled=payload.enabled,
             message_mode=payload.message_mode,
-            render_mode=payload.render_mode,
         )
         return {"id": target_id, **payload.model_dump(mode="json")}
 
@@ -458,20 +450,6 @@ def create_app(context: ApplicationContext | None = None) -> FastAPI:
         except (RuntimeError, ValueError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return context.runtime_config.qqbot_public()
-
-    @app.get("/api/settings/poll")
-    async def poll_config(_: None = Depends(require_admin)) -> dict[str, int]:
-        return context.runtime_config.poll_defaults()
-
-    @app.post("/api/settings/poll")
-    async def save_poll_config(
-        payload: PollConfigInput,
-        _: None = Depends(require_admin),
-    ) -> dict[str, int]:
-        return context.runtime_config.save_poll_defaults(
-            payload.bilibili_poll_interval_seconds,
-            payload.yysls_poll_interval_seconds,
-        )
 
     @app.post("/api/qqbot/test")
     async def test_qqbot(

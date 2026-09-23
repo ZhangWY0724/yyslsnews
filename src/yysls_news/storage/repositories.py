@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 from typing import Any
 
 from yysls_news.domain.models import (
@@ -283,7 +282,6 @@ class DeliveryTargetRepository:
         target_openid: str,
         enabled: bool = True,
         message_mode: MessageMode = MessageMode.IMAGE,
-        render_mode: str = "playwright",
         display_name: str = "",
     ) -> int:
         now = utc_now()
@@ -292,8 +290,8 @@ class DeliveryTargetRepository:
                 """
                 INSERT INTO delivery_targets(
                     scene_type, target_openid, display_name, enabled, message_mode,
-                    render_mode, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(scene_type, target_openid) DO UPDATE SET
                     display_name = CASE
                         WHEN excluded.display_name <> '' THEN excluded.display_name
@@ -301,7 +299,6 @@ class DeliveryTargetRepository:
                     END,
                     enabled=excluded.enabled,
                     message_mode=excluded.message_mode,
-                    render_mode=excluded.render_mode,
                     updated_at=excluded.updated_at
                 """,
                 (
@@ -310,7 +307,6 @@ class DeliveryTargetRepository:
                     display_name.strip(),
                     int(enabled),
                     message_mode.value,
-                    render_mode,
                     now,
                     now,
                 ),
@@ -453,7 +449,10 @@ class ContentRepository:
     def get_by_id(self, content_id: int) -> dict[str, Any] | None:
         with self.database.connect() as connection:
             row = connection.execute(
-                "SELECT * FROM content_items WHERE id = ?", (content_id,)
+                """SELECT id, source_type, source_key, external_id, title, author,
+                          category, source_url, published_at, created_at
+                   FROM content_items WHERE id = ?""",
+                (content_id,),
             ).fetchone()
         return dict(row) if row is not None else None
 
@@ -464,9 +463,6 @@ class ContentRepository:
     ) -> tuple[int, bool, int]:
         """在同一事务中保存内容并为当前启用目标创建推送任务。"""
         created_at = utc_now()
-        content_hash = hashlib.sha256(
-            f"{content.title}\n{content.content_text}\n{content.source_url}".encode()
-        ).hexdigest()
         published_at = content.published_at.isoformat() if content.published_at else None
 
         with self.database.connect() as connection:
@@ -476,9 +472,8 @@ class ContentRepository:
                     """
                     INSERT OR IGNORE INTO content_items(
                         source_type, source_key, external_id, title, author, category,
-                        content_text, content_html, render_payload_json, raw_payload_json,
-                        source_url, published_at, content_hash, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        source_url, published_at, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         content.source_type.value,
@@ -487,13 +482,8 @@ class ContentRepository:
                         content.title,
                         content.author,
                         content.category,
-                        content.content_text,
-                        content.content_html,
-                        self.database.dumps(content.render_payload),
-                        self.database.dumps(content.raw_payload),
                         content.source_url,
                         published_at,
-                        content_hash,
                         created_at,
                     ),
                 )
@@ -548,7 +538,10 @@ class ContentRepository:
     def list_recent(self, limit: int = 20) -> list[dict[str, Any]]:
         with self.database.connect() as connection:
             rows = connection.execute(
-                "SELECT * FROM content_items ORDER BY created_at DESC LIMIT ?", (limit,)
+                """SELECT id, source_type, source_key, external_id, title, author,
+                          category, source_url, published_at, created_at
+                   FROM content_items ORDER BY created_at DESC LIMIT ?""",
+                (limit,),
             ).fetchall()
         return [dict(row) for row in rows]
 
@@ -563,12 +556,10 @@ class DeliveryTaskRepository:
                 """
                 SELECT task.*, content_items.source_type, content_items.source_key,
                        content_items.external_id, content_items.title,
-                       content_items.content_text, content_items.render_payload_json,
-                       content_items.raw_payload_json, content_items.source_url,
-                       content_items.content_html,
+                       content_items.source_url,
                        delivery_targets.scene_type, delivery_targets.target_openid,
                        delivery_targets.display_name AS target_display_name,
-                       delivery_targets.message_mode, delivery_targets.render_mode
+                       delivery_targets.message_mode
                 FROM delivery_tasks AS task
                 JOIN content_items ON content_items.id = task.content_item_id
                 JOIN delivery_targets ON delivery_targets.id = task.delivery_target_id

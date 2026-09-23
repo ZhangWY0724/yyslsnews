@@ -35,7 +35,7 @@ yysls-news = "yysls_news.main:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-yysls_news = ["web/templates/*.html", "rendering/templates/**/*.html"]
+yysls_news = ["web/templates/*.html"]
 
 [tool.pytest.ini_options]
 addopts = "-q"

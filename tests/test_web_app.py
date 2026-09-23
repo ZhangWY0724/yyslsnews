@@ -21,14 +21,12 @@ def _mark_admin_password_changed(context: ApplicationContext) -> None:
 
 def test_initial_admin_password_requires_change(tmp_path) -> None:
     settings = Settings(
-        app_env="test",
         database_path=tmp_path / "initial-password.db",
         encryption_key=Fernet.generate_key().decode(),
         admin_username="admin",
         admin_password="initial-password",
         host="127.0.0.1",
         port=43100,
-        bilibili_poll_interval_seconds=300,
         yysls_poll_interval_seconds=600,
         http_timeout_seconds=5,
         qqbot_api_base_url="https://api.bot.qq.com",
@@ -79,14 +77,12 @@ def test_initial_admin_password_requires_change(tmp_path) -> None:
 
 def test_web_configures_subscription_target_and_qqbot(tmp_path, monkeypatch) -> None:
     settings = Settings(
-        app_env="test",
         database_path=tmp_path / "web.db",
         encryption_key=Fernet.generate_key().decode(),
         admin_username="admin",
         admin_password="password",
         host="127.0.0.1",
         port=43100,
-        bilibili_poll_interval_seconds=300,
         yysls_poll_interval_seconds=600,
         http_timeout_seconds=5,
         qqbot_api_base_url="https://api.bot.qq.com",
@@ -166,14 +162,12 @@ def test_web_configures_subscription_target_and_qqbot(tmp_path, monkeypatch) -> 
 
 def test_historical_content_test_push_uses_selected_target(tmp_path, monkeypatch) -> None:
     settings = Settings(
-        app_env="test",
         database_path=tmp_path / "historical-test-push.db",
         encryption_key=Fernet.generate_key().decode(),
         admin_username="admin",
         admin_password="password",
         host="127.0.0.1",
         port=43100,
-        bilibili_poll_interval_seconds=300,
         yysls_poll_interval_seconds=600,
         http_timeout_seconds=5,
         qqbot_api_base_url="https://api.bot.qq.com",
@@ -196,12 +190,8 @@ def test_historical_content_test_push_uses_selected_target(tmp_path, monkeypatch
             title="历史动态",
             author="测试UP",
             category="文字",
-            content_text="历史动态内容",
-            content_html="<p>历史动态内容</p>",
             source_url="https://www.bilibili.com/opus/dynamic-1",
             published_at=None,
-            render_payload={"content": "历史动态内容"},
-            raw_payload={},
         ),
         create_tasks=False,
     )
@@ -235,14 +225,12 @@ def test_historical_content_test_push_uses_selected_target(tmp_path, monkeypatch
 
 def test_bilibili_login_saves_and_exposes_username(tmp_path, monkeypatch) -> None:
     settings = Settings(
-        app_env="test",
         database_path=tmp_path / "login-username.db",
         encryption_key=Fernet.generate_key().decode(),
         admin_username="admin",
         admin_password="password",
         host="127.0.0.1",
         port=43100,
-        bilibili_poll_interval_seconds=300,
         yysls_poll_interval_seconds=600,
         http_timeout_seconds=5,
         qqbot_api_base_url="https://api.bot.qq.com",
@@ -285,14 +273,12 @@ def test_bilibili_login_saves_and_exposes_username(tmp_path, monkeypatch) -> Non
 
 def test_bilibili_login_error_returns_readable_http_error(tmp_path) -> None:
     settings = Settings(
-        app_env="test",
         database_path=tmp_path / "login.db",
         encryption_key=Fernet.generate_key().decode(),
         admin_username="admin",
         admin_password="password",
         host="127.0.0.1",
         port=43100,
-        bilibili_poll_interval_seconds=300,
         yysls_poll_interval_seconds=600,
         http_timeout_seconds=5,
         qqbot_api_base_url="https://api.bot.qq.com",

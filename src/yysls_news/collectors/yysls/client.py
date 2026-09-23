@@ -4,8 +4,7 @@ from dataclasses import dataclass
 
 import httpx
 
-from yysls_news.collectors.yysls.parser import NewsListItem, parse_article, parse_listing
-from yysls_news.domain.models import NormalizedContent
+from yysls_news.collectors.yysls.parser import NewsListItem, parse_listing
 
 DEFAULT_NEWS_URL = "https://www.yysls.cn/news/"
 
@@ -26,14 +25,6 @@ class YyslsClient:
     ) -> list[NewsListItem]:
         html = await self._get(list_url)
         return parse_listing(html, list_url, category)
-
-    async def fetch_article(
-        self,
-        url: str,
-        list_item: NewsListItem | None = None,
-    ) -> NormalizedContent:
-        html = await self._get(url)
-        return parse_article(html, url, list_item)
 
     async def _get(self, url: str) -> str:
         try:

@@ -68,13 +68,8 @@ CREATE TABLE IF NOT EXISTS content_items (
     title TEXT NOT NULL DEFAULT '',
     author TEXT NOT NULL DEFAULT '',
     category TEXT NOT NULL DEFAULT '',
-    content_text TEXT NOT NULL DEFAULT '',
-    content_html TEXT NOT NULL DEFAULT '',
-    render_payload_json TEXT NOT NULL DEFAULT '{}',
-    raw_payload_json TEXT NOT NULL DEFAULT '{}',
     source_url TEXT NOT NULL DEFAULT '',
     published_at TEXT,
-    content_hash TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
     UNIQUE(source_type, source_key, external_id)
 );
@@ -86,7 +81,6 @@ CREATE TABLE IF NOT EXISTS delivery_targets (
     display_name TEXT NOT NULL DEFAULT '',
     enabled INTEGER NOT NULL DEFAULT 1,
     message_mode TEXT NOT NULL DEFAULT 'image',
-    render_mode TEXT NOT NULL DEFAULT 'playwright',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     UNIQUE(scene_type, target_openid)
@@ -147,16 +141,6 @@ CREATE INDEX IF NOT EXISTS idx_push_history_created_at
 CREATE INDEX IF NOT EXISTS idx_push_history_status
     ON push_history(status, created_at DESC);
 
-CREATE TABLE IF NOT EXISTS poll_runs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    source_type TEXT NOT NULL,
-    source_key TEXT NOT NULL,
-    started_at TEXT NOT NULL,
-    finished_at TEXT,
-    discovered_count INTEGER NOT NULL DEFAULT 0,
-    inserted_count INTEGER NOT NULL DEFAULT 0,
-    error TEXT NOT NULL DEFAULT ''
-);
 """
 
 
@@ -169,6 +153,7 @@ class Database:
         with self.connect() as connection:
             connection.executescript(SCHEMA)
             self._migrate_delivery_target_name(connection)
+            self._remove_unused_schema(connection)
 
     @staticmethod
     def _migrate_delivery_target_name(connection: sqlite3.Connection) -> None:
@@ -180,6 +165,60 @@ class Database:
             connection.execute(
                 "ALTER TABLE delivery_targets ADD COLUMN display_name TEXT NOT NULL DEFAULT ''"
             )
+
+    @staticmethod
+    def _remove_unused_schema(connection: sqlite3.Connection) -> None:
+        for table, obsolete in (
+            (
+                "content_items",
+                (
+                    "content_text",
+                    "content_html",
+                    "render_payload_json",
+                    "raw_payload_json",
+                    "content_hash",
+                ),
+            ),
+            ("delivery_targets", ("render_mode",)),
+        ):
+            columns = {
+                str(row["name"])
+                for row in connection.execute(f"PRAGMA table_info({table})")
+            }
+            for column in obsolete:
+                if column in columns:
+                    connection.execute(f"ALTER TABLE {table} DROP COLUMN {column}")
+        connection.execute("DROP TABLE IF EXISTS poll_runs")
+        connection.execute("DELETE FROM app_settings WHERE key = 'poll_config'")
+        connection.execute(
+            """
+            UPDATE delivery_tasks
+            SET status = 'failed', last_error = '官网分页链接误采集，已停止推送'
+            WHERE status IN ('pending', 'retry')
+              AND content_item_id IN (
+                  SELECT id FROM content_items
+                  WHERE source_type = 'yysls'
+                    AND (source_url LIKE '%/news/index.html'
+                         OR source_url GLOB '*/news/index_[0-9]*.html')
+              )
+            """
+        )
+        connection.execute(
+            """
+            DELETE FROM content_items
+            WHERE source_type = 'yysls'
+              AND (source_url LIKE '%/news/index.html'
+                   OR source_url GLOB '*/news/index_[0-9]*.html')
+              AND NOT EXISTS (
+                  SELECT 1 FROM delivery_tasks
+                  WHERE delivery_tasks.content_item_id = content_items.id
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM push_history
+                  WHERE push_history.content_item_id = content_items.id
+              )
+            """
+        )
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
