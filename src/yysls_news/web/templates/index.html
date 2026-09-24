@@ -57,6 +57,7 @@
     .btn-primary:hover { border-color: #2858df; background: #2858df; }
     .btn-danger { border-color: #f0cdd0; color: var(--red); background: var(--red-soft); }
     .btn-small { min-height: 30px; padding: 0 10px; font-size: 12px; }
+    .row-actions { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
     .page { display: none; max-width: 1440px; margin: 0 auto; }
     .page.active { display: block; }
     .page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 20px; }
@@ -80,6 +81,29 @@
     th { padding: 10px 9px; border-bottom: 1px solid var(--border); color: #919bb0; font-size: 11px; font-weight: 700; text-align: left; white-space: nowrap; }
     td { padding: 13px 9px; border-bottom: 1px solid #f0f2f6; color: #4b5870; vertical-align: middle; }
     tr:last-child td { border-bottom: 0; }
+    .push-history-table { min-width: 1040px; table-layout: fixed; }
+    .push-history-table th, .push-history-table td { padding: 12px 10px; }
+    .push-history-table td { vertical-align: top; overflow-wrap: anywhere; }
+    .history-group-row td { background: #f8faff; vertical-align: middle; }
+    .history-tree-toggle { display: inline-grid; width: 25px; height: 25px; margin-right: 8px; padding: 0; place-items: center; border: 1px solid var(--border); border-radius: 6px; color: #52627d; background: #fff; font-size: 13px; }
+    .history-tree-toggle:hover { border-color: #b9c6e1; background: var(--blue-soft); }
+    .history-root-title { display: inline; line-height: 1.5; }
+    .history-root-meta { margin: 4px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+    .history-group-summary { display: flex; flex-wrap: wrap; gap: 4px; }
+    .history-child-content { display: flex; min-width: 0; align-items: flex-start; gap: 8px; padding-left: 8px; }
+    .history-tree-branch { display: block; width: 100%; color: #9aa6bb; font-size: 15px; line-height: 1.4; text-align: center; }
+    .history-child-name { min-width: 0; overflow-wrap: anywhere; }
+    .history-child-row[hidden] { display: none; }
+    .history-time { color: #536078; line-height: 1.5; }
+    .history-title { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-height: 1.5; overflow-wrap: anywhere; }
+    .history-meta { line-height: 1.5; }
+    .history-message-details { min-width: 0; margin: 0; padding: 0; border: 0; }
+    .history-message-details summary { display: inline-flex; align-items: center; min-height: 28px; padding: 0 9px; border: 1px solid var(--border); border-radius: 7px; color: #536078; background: #fff; font-size: 12px; font-weight: 600; }
+    .history-message-fields { display: grid; gap: 9px; min-width: 0; margin-top: 9px; }
+    .history-message-field { min-width: 0; }
+    .history-message-label { display: block; margin-bottom: 3px; color: var(--muted); font-size: 11px; }
+    .history-message-field code { display: block; max-width: 100%; color: #46536b; font: 11px/1.5 Consolas, monospace; overflow-wrap: anywhere; word-break: break-all; }
+    .history-error { max-width: 100%; margin-top: 7px; color: var(--red); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
     .primary-text { color: var(--text); font-weight: 650; }
     .secondary-text { margin-top: 3px; color: #99a3b6; font-size: 11px; }
     .empty { padding: 28px 12px; color: #a0a9ba; text-align: center; }
@@ -207,17 +231,17 @@
             <details><summary>备用：手动录入 Cookie</summary><form id="cookie-form"><div class="form-grid" style="margin-top:15px"><div class="field"><label for="sessdata">SESSDATA</label><input id="sessdata" type="password" required></div><div class="field"><label for="bili-jct">bili_jct</label><input id="bili-jct" type="password" required></div><div class="field"><label for="dedeuserid">DedeUserID</label><input id="dedeuserid" required></div><div class="field"><label for="buvid3">buvid3（可选）</label><input id="buvid3"></div><div class="field"><label for="buvid4">buvid4（可选）</label><input id="buvid4"></div><div class="field"><label for="ac-time-value">ac_time_value（可选）</label><input id="ac-time-value" type="password"></div></div><div class="form-actions"><button class="btn btn-primary" type="submit">保存 Cookie</button></div></form></details>
           </section>
           <section class="panel">
-            <div class="panel-header"><h2 class="panel-title">添加或更新 UP 主</h2><span class="panel-hint">最短轮询间隔 60 秒</span></div>
-            <form id="bili-form"><div class="form-grid"><div class="field"><label for="uid">UID</label><input id="uid" type="number" min="1" required placeholder="例如 123456"></div><div class="field"><label for="display-name">显示名称</label><input id="display-name" placeholder="留空自动获取 B站昵称"></div><div class="field"><label for="bili-interval">轮询间隔（秒）</label><input id="bili-interval" type="number" min="60" value="300" required></div><div class="field"><label for="filter-types">动态类型过滤</label><input id="filter-types" placeholder="逗号分隔，可选"></div><div class="field full"><label for="filter-keywords">关键词过滤</label><input id="filter-keywords" placeholder="逗号分隔，可选"></div></div><div class="form-actions"><button class="btn btn-primary" type="submit">保存订阅</button></div></form>
+            <div class="panel-header"><h2 class="panel-title" id="bili-form-title">添加 UP 主</h2><span class="panel-hint">UID 编辑时固定 · 最短轮询间隔 60 秒</span></div>
+            <form id="bili-form"><div class="form-grid"><div class="field"><label for="uid">UID</label><input id="uid" type="number" min="1" required placeholder="例如 123456"></div><div class="field"><label for="display-name">显示名称</label><input id="display-name" placeholder="留空自动获取 B站昵称"></div><div class="field"><label for="bili-interval">轮询间隔（秒）</label><input id="bili-interval" type="number" min="60" value="300" required></div><div class="field"><label for="filter-types">动态类型过滤</label><input id="filter-types" placeholder="逗号分隔，可选"></div><div class="field"><label for="filter-keywords">关键词过滤</label><input id="filter-keywords" placeholder="逗号分隔，可选"></div><div class="field"><label for="bili-enabled">订阅状态</label><select id="bili-enabled"><option value="true">启用</option><option value="false">停用</option></select></div></div><div class="form-actions"><button class="btn btn-primary" id="bili-save-button" type="submit">保存订阅</button><button class="btn" id="bili-cancel-edit" type="button" hidden>取消编辑</button></div></form>
             <div class="info-box" style="margin-top:20px">首次添加 UP 主时只建立当前动态基线，不会把历史动态一次性推送出来。</div>
           </section>
         </div>
-        <section class="panel"><div class="panel-header"><h2 class="panel-title">已配置的 UP 主</h2><span class="panel-hint">支持按 UID 更新</span></div><div class="table-wrap"><table><thead><tr><th>UP 主</th><th>UID</th><th>状态</th><th>轮询间隔</th><th>最近成功</th><th>最近错误</th><th></th></tr></thead><tbody id="bili-table"></tbody></table></div></section>
+        <section class="panel"><div class="panel-header"><h2 class="panel-title">已配置的 UP 主</h2><span class="panel-hint">编辑规则，或删除订阅</span></div><div class="table-wrap"><table><thead><tr><th>UP 主</th><th>UID</th><th>状态</th><th>轮询间隔</th><th>最近成功</th><th>最近错误</th><th>操作</th></tr></thead><tbody id="bili-table"></tbody></table></div></section>
       </section>
 
       <section class="page" id="page-yysls">
-        <section class="panel" style="margin-bottom:18px"><div class="panel-header"><h2 class="panel-title">添加或更新来源</h2><span class="panel-hint">详情页截取 .container-all.news</span></div><form id="source-form"><div class="form-grid three"><div class="field"><label for="source-key">来源标识</label><input id="source-key" value="official" required></div><div class="field"><label for="source-name">来源名称</label><input id="source-name" value="燕云十六声官网新闻" required></div><div class="field"><label for="source-category">分类</label><input id="source-category" value="最新"></div><div class="field full"><label for="source-url">新闻列表 URL</label><input id="source-url" value="https://www.yysls.cn/news/" type="url" required></div><div class="field"><label for="source-interval">轮询间隔（秒）</label><input id="source-interval" type="number" min="60" value="600" required></div></div><div class="form-actions"><button class="btn btn-primary" type="submit">保存来源</button></div></form></section>
-        <section class="panel"><div class="panel-header"><h2 class="panel-title">来源列表</h2><span class="panel-hint">状态和错误会显示在这里</span></div><div class="table-wrap"><table><thead><tr><th>来源</th><th>分类</th><th>状态</th><th>轮询间隔</th><th>下次轮询</th><th>最近错误</th></tr></thead><tbody id="yysls-table"></tbody></table></div></section>
+        <section class="panel" style="margin-bottom:18px"><div class="panel-header"><h2 class="panel-title" id="source-form-title">添加官网来源</h2><span class="panel-hint">详情页截取 .container-all.news；来源标识编辑时固定</span></div><form id="source-form"><div class="form-grid three"><div class="field"><label for="source-key">来源标识</label><input id="source-key" value="official" required></div><div class="field"><label for="source-name">来源名称</label><input id="source-name" value="燕云十六声官网新闻" required></div><div class="field"><label for="source-category">分类</label><input id="source-category" value="最新"></div><div class="field full"><label for="source-url">新闻列表 URL</label><input id="source-url" value="https://www.yysls.cn/news/" type="url" required></div><div class="field"><label for="source-interval">轮询间隔（秒）</label><input id="source-interval" type="number" min="60" value="600" required></div><div class="field"><label for="source-enabled">来源状态</label><select id="source-enabled"><option value="true">启用</option><option value="false">停用</option></select></div></div><div class="form-actions"><button class="btn btn-primary" id="source-save-button" type="submit">保存来源</button><button class="btn" id="source-cancel-edit" type="button" hidden>取消编辑</button></div></form></section>
+        <section class="panel"><div class="panel-header"><h2 class="panel-title">来源列表</h2><span class="panel-hint">状态和错误会显示在这里</span></div><div class="table-wrap"><table><thead><tr><th>来源</th><th>分类</th><th>状态</th><th>轮询间隔</th><th>下次轮询</th><th>最近错误</th><th>操作</th></tr></thead><tbody id="yysls-table"></tbody></table></div></section>
       </section>
 
       <section class="page" id="page-qqbot">
@@ -248,23 +272,23 @@
             </div>
           </section>
           <section class="panel">
-            <div class="panel-header"><h2 class="panel-title">手动新增或更新目标</h2><span class="panel-hint">同一场景和 OpenID 会自动更新</span></div>
-            <form id="target-form"><div class="form-grid"><div class="field"><label for="scene">目标类型</label><select id="scene"><option value="group">群聊 group_openid</option><option value="user">单聊 user_openid</option></select></div><div class="field"><label for="openid">OpenID</label><input id="openid" required></div><div class="field"><label for="target-display-name">显示名称（可选）</label><input id="target-display-name" placeholder="自动绑定时会尽量获取"></div><div class="field full"><label for="message-mode">消息模式</label><select id="message-mode"><option value="image">图片（推荐）</option><option value="markdown">Markdown</option><option value="text">文本</option></select></div></div><div class="form-actions"><button class="btn" type="submit">保存推送目标</button></div></form>
-            <div class="info-box" style="margin-top:20px">自动绑定成功后，OpenID 会直接写入下方目标列表；绑定码只显示原文一次，3 分钟后自动失效。</div>
+            <div class="panel-header"><h2 class="panel-title" id="target-form-title">手动新增目标</h2><span class="panel-hint">编辑时可调整名称、状态和消息模式</span></div>
+            <form id="target-form"><div class="form-grid"><div class="field"><label for="scene">目标类型</label><select id="scene"><option value="group">群聊 group_openid</option><option value="user">单聊 user_openid</option></select></div><div class="field"><label for="openid">OpenID</label><input id="openid" required></div><div class="field"><label for="target-display-name">显示名称（可选）</label><input id="target-display-name" placeholder="自动绑定时会尽量获取"></div><div class="field"><label for="target-enabled">目标状态</label><select id="target-enabled"><option value="true">启用</option><option value="false">停用</option></select></div><div class="field full"><label for="message-mode">消息模式</label><select id="message-mode"><option value="image">图片（推荐）</option><option value="markdown">Markdown</option><option value="text">文本</option></select></div></div><div class="form-actions"><button class="btn btn-primary" id="target-save-button" type="submit">保存推送目标</button><button class="btn" id="target-cancel-edit" type="button" hidden>取消编辑</button></div></form>
+            <div class="info-box" style="margin-top:20px">自动绑定成功后，OpenID 会直接写入下方目标列表；绑定码只显示原文一次，3 分钟后自动失效。目标类型和 OpenID 创建后固定；更换目标时请删除旧目标并重新绑定。</div>
           </section>
         </div>
-        <section class="panel"><div class="panel-header"><h2 class="panel-title">目标列表</h2><span class="panel-hint">图片模式统一使用 Playwright</span></div><div class="table-wrap"><table><thead><tr><th>类型</th><th>名称 / OpenID</th><th>消息模式</th><th>状态</th><th>更新时间</th></tr></thead><tbody id="target-table"></tbody></table></div></section>
+        <section class="panel"><div class="panel-header"><h2 class="panel-title">目标列表</h2><span class="panel-hint">删除会保留已发送记录</span></div><div class="table-wrap"><table><thead><tr><th>类型</th><th>名称 / OpenID</th><th>消息模式</th><th>状态</th><th>更新时间</th><th>操作</th></tr></thead><tbody id="target-table"></tbody></table></div></section>
       </section>
 
       <section class="page" id="page-settings">
         <div class="content-grid equal">
-          <section class="panel"><div class="panel-header"><h2 class="panel-title">图片渲染策略</h2><span class="chip chip-blue">Playwright</span></div><div class="info-box">B站直接截取动态详情页正文；官网直接打开详情页并截取 <code>.container-all.news</code>。两者统一使用 Playwright，浏览器只在处理推送图片时按需启动。</div><div class="service-list" style="margin-top:18px"><div class="service-item"><div><div class="service-name">B站渲染</div><div class="service-detail">动态详情页单张长图</div></div><span class="chip chip-green">已启用</span></div><div class="service-item"><div><div class="service-name">官网渲染</div><div class="service-detail">原始 .container-all.news 容器</div></div><span class="chip chip-green">已启用</span></div></div></section>
+          <section class="panel"><div class="panel-header"><h2 class="panel-title">图片渲染策略</h2><span class="chip chip-blue">Playwright</span></div><div class="info-box">B站直接截取动态详情页正文；官网直接打开详情页并截取 <code>.container-all.news</code>。两者统一使用 Playwright，浏览器只在处理推送图片时按需启动。</div><div class="service-list" style="margin-top:18px"><div class="service-item"><div><div class="service-name">B站渲染</div><div class="service-detail">动态详情页长图，过长时分页</div></div><span class="chip chip-green">已启用</span></div><div class="service-item"><div><div class="service-name">官网渲染</div><div class="service-detail">原始 .container-all.news 容器</div></div><span class="chip chip-green">已启用</span></div></div></section>
         </div>
       </section>
 
       <section class="page" id="page-logs">
         <section class="panel">
-          <div class="panel-header"><div><h2 class="panel-title">实时运行日志</h2><span class="panel-hint">仅保留当前进程最近 500 条，页面每 2 秒自动刷新</span></div><div class="panel-header-actions"><button class="btn btn-small" id="logs-refresh-button" type="button">刷新日志</button></div></div>
+          <div class="panel-header"><div><h2 class="panel-title">实时运行日志</h2><span class="panel-hint">保留当前进程最近 5000 条，页面每 2 秒自动刷新</span></div><div class="panel-header-actions"><button class="btn btn-small" id="logs-refresh-button" type="button">刷新日志</button></div></div>
           <pre class="runtime-log" id="runtime-log-output">正在加载日志...</pre>
         </section>
       </section>
@@ -275,13 +299,16 @@
             <div><h2 class="panel-title">历史推送记录</h2><span class="panel-hint" id="push-history-summary">记录自动推送、历史测试和 QQBot 测试结果</span></div>
             <div class="panel-header-actions"><select id="push-history-status" aria-label="推送记录状态"><option value="">全部状态</option><option value="sent">成功</option><option value="failed">失败</option><option value="processing">发送中</option></select><button class="btn btn-small" id="push-history-refresh-button" type="button">刷新记录</button></div>
           </div>
-          <div class="table-wrap"><table><thead><tr><th>时间</th><th>内容</th><th>目标</th><th>触发方式</th><th>结果</th><th>消息信息</th></tr></thead><tbody id="push-history-table"></tbody></table></div>
+          <div class="table-wrap"><table class="push-history-table"><colgroup><col style="width:4%"><col style="width:12%"><col style="width:34%"><col style="width:13%"><col style="width:15%"><col style="width:22%"></colgroup><thead><tr><th aria-label="展开或收起"></th><th>时间</th><th>动态 / 推送对象</th><th>触发方式</th><th>结果</th><th>消息信息</th></tr></thead><tbody id="push-history-table"></tbody></table></div>
         </section>
       </section>
     </main>
   </div>
   <script>
     var dashboardState = null;
+    var editingSubscriptionUid = null;
+    var editingSourceId = null;
+    var editingTargetId = null;
     var loginSession = '';
     var loginPollTimer = null;
     var loginPollInFlight = false;
@@ -294,6 +321,8 @@
     var runtimeLogRequestInFlight = false;
     var pushHistoryTimer = null;
     var pushHistoryRequestInFlight = false;
+    var expandedPushHistoryIds = Object.create(null);
+    var expandedPushGroupIds = Object.create(null);
     var pageMeta = {
       overview: ['系统总览', '查看采集来源、登录状态和推送队列。'],
       bilibili: ['B站监控', '配置扫码登录、UP 主订阅和动态过滤规则。'],
@@ -309,6 +338,7 @@
       expired: '二维码已过期', relogin_required: '需要重新登录', refreshing: '刷新中', failed: '异常',
       pending: '待发送', retry: '待重试', processing: '处理中', sent: '已发送',
       bound: '已绑定', cancelled: '已取消', connected: '监听中', not_started: '未启动',
+      enabled: '启用', disabled: '停用',
       stopped: '已停止', error: '异常'
     };
 
@@ -417,10 +447,10 @@
 
       var sourceRows = [];
       subscriptions.forEach(function(item) {
-        sourceRows.push('<tr><td><div class="primary-text">' + escapeHtml(item.display_name || item.uid) + '</div><div class="secondary-text">UID ' + escapeHtml(item.uid) + '</div></td><td>B站</td><td>' + chip(item.enabled ? 'logged_in' : 'not_configured', item.enabled ? 'green' : 'gray') + '</td><td>' + formatDate(item.next_poll_at) + '</td><td>' + formatDate(item.last_success_at) + '</td></tr>');
+        sourceRows.push('<tr><td><div class="primary-text">' + escapeHtml(item.display_name || item.uid) + '</div><div class="secondary-text">UID ' + escapeHtml(item.uid) + '</div></td><td>B站</td><td>' + chip(item.enabled ? 'enabled' : 'disabled', item.enabled ? 'green' : 'gray') + '</td><td>' + formatDate(item.next_poll_at) + '</td><td>' + formatDate(item.last_success_at) + '</td></tr>');
       });
       sources.forEach(function(item) {
-        sourceRows.push('<tr><td><div class="primary-text">' + escapeHtml(item.name) + '</div><div class="secondary-text">' + escapeHtml(item.url) + '</div></td><td>官网</td><td>' + chip(item.enabled ? 'logged_in' : 'not_configured', item.enabled ? 'green' : 'gray') + '</td><td>' + formatDate(item.next_poll_at) + '</td><td>' + formatDate(item.last_success_at) + '</td></tr>');
+        sourceRows.push('<tr><td><div class="primary-text">' + escapeHtml(item.name) + '</div><div class="secondary-text">' + escapeHtml(item.url) + '</div></td><td>官网</td><td>' + chip(item.enabled ? 'enabled' : 'disabled', item.enabled ? 'green' : 'gray') + '</td><td>' + formatDate(item.next_poll_at) + '</td><td>' + formatDate(item.last_success_at) + '</td></tr>');
       });
       document.querySelector('#source-table').innerHTML = sourceRows.length ? sourceRows.join('') : emptyRow(5);
 
@@ -441,23 +471,38 @@
     }
     function renderSubscriptions(items) {
       document.querySelector('#bili-table').innerHTML = items.length ? items.map(function(item) {
-        return '<tr><td><div class="primary-text">' + escapeHtml(item.display_name || item.uid) + '</div><div class="secondary-text">' + escapeHtml((item.filter_types || []).join('、') || '未设置类型过滤') + '</div></td><td>' + escapeHtml(item.uid) + '</td><td>' + chip(item.enabled ? 'logged_in' : 'not_configured', item.enabled ? 'green' : 'gray') + '</td><td>' + formatInterval(item.poll_interval_seconds) + '</td><td>' + formatDate(item.last_success_at) + '</td><td>' + escapeHtml(item.last_error || '--') + '</td><td><button class="btn btn-small btn-danger" type="button" data-delete-uid="' + escapeHtml(item.uid) + '">删除</button></td></tr>';
+        return '<tr><td><div class="primary-text">' + escapeHtml(item.display_name || item.uid) + '</div><div class="secondary-text">' + escapeHtml((item.filter_types || []).join('、') || '未设置类型过滤') + '</div></td><td>' + escapeHtml(item.uid) + '</td><td>' + chip(item.enabled ? 'enabled' : 'disabled', item.enabled ? 'green' : 'gray') + '</td><td>' + formatInterval(item.poll_interval_seconds) + '</td><td>' + formatDate(item.last_success_at) + '</td><td>' + escapeHtml(item.last_error || '--') + '</td><td><div class="row-actions"><button class="btn btn-small" type="button" data-edit-uid="' + escapeHtml(item.uid) + '">编辑</button><button class="btn btn-small btn-danger" type="button" data-delete-uid="' + escapeHtml(item.uid) + '">删除</button></div></td></tr>';
       }).join('') : emptyRow(7, '还没有配置 UP 主');
+      document.querySelectorAll('[data-edit-uid]').forEach(function(button) {
+        button.addEventListener('click', function() { editSubscription(button.dataset.editUid); });
+      });
       document.querySelectorAll('[data-delete-uid]').forEach(function(button) {
         button.addEventListener('click', function() { deleteSubscription(button.dataset.deleteUid); });
       });
     }
     function renderSources(items) {
       document.querySelector('#yysls-table').innerHTML = items.length ? items.map(function(item) {
-        return '<tr><td><div class="primary-text">' + escapeHtml(item.name) + '</div><div class="secondary-text">' + escapeHtml(item.source_key) + '</div></td><td>' + escapeHtml(item.category || '--') + '</td><td>' + chip(item.enabled ? 'logged_in' : 'not_configured', item.enabled ? 'green' : 'gray') + '</td><td>' + formatInterval(item.poll_interval_seconds) + '</td><td>' + formatDate(item.next_poll_at) + '</td><td>' + escapeHtml(item.last_error || '--') + '</td></tr>';
-      }).join('') : emptyRow(6, '还没有配置官网来源');
+        return '<tr><td><div class="primary-text">' + escapeHtml(item.name) + '</div><div class="secondary-text">' + escapeHtml(item.source_key) + '</div></td><td>' + escapeHtml(item.category || '--') + '</td><td>' + chip(item.enabled ? 'enabled' : 'disabled', item.enabled ? 'green' : 'gray') + '</td><td>' + formatInterval(item.poll_interval_seconds) + '</td><td>' + formatDate(item.next_poll_at) + '</td><td>' + escapeHtml(item.last_error || '--') + '</td><td><div class="row-actions"><button class="btn btn-small" type="button" data-edit-source-id="' + escapeHtml(item.id) + '">编辑</button><button class="btn btn-small btn-danger" type="button" data-delete-source-id="' + escapeHtml(item.id) + '">删除</button></div></td></tr>';
+      }).join('') : emptyRow(7, '还没有配置官网来源');
+      document.querySelectorAll('[data-edit-source-id]').forEach(function(button) {
+        button.addEventListener('click', function() { editSource(button.dataset.editSourceId); });
+      });
+      document.querySelectorAll('[data-delete-source-id]').forEach(function(button) {
+        button.addEventListener('click', function() { deleteSource(button.dataset.deleteSourceId); });
+      });
     }
     function renderTargets(items) {
       var modeLabels = {image: '图片', markdown: 'Markdown', text: '文本'};
       document.querySelector('#target-table').innerHTML = items.length ? items.map(function(item) {
         var name = item.display_name || (item.scene_type === 'group' ? '未获取群名称' : '未获取昵称');
-        return '<tr><td>' + escapeHtml(item.scene_type === 'group' ? '群聊' : '单聊') + '</td><td><div class="primary-text">' + escapeHtml(name) + '</div><div class="secondary-text">' + escapeHtml(maskOpenId(item.target_openid)) + '</div></td><td>' + escapeHtml(modeLabels[item.message_mode] || item.message_mode) + '</td><td>' + chip(item.enabled ? 'logged_in' : 'not_configured', item.enabled ? 'green' : 'gray') + '</td><td>' + formatDate(item.updated_at) + '</td></tr>';
-      }).join('') : emptyRow(5, '还没有配置推送目标');
+        return '<tr><td>' + escapeHtml(item.scene_type === 'group' ? '群聊' : '单聊') + '</td><td><div class="primary-text">' + escapeHtml(name) + '</div><div class="secondary-text">' + escapeHtml(maskOpenId(item.target_openid)) + '</div></td><td>' + escapeHtml(modeLabels[item.message_mode] || item.message_mode) + '</td><td>' + chip(item.enabled ? 'enabled' : 'disabled', item.enabled ? 'green' : 'gray') + '</td><td>' + formatDate(item.updated_at) + '</td><td><div class="row-actions"><button class="btn btn-small" type="button" data-edit-target-id="' + escapeHtml(item.id) + '">编辑</button><button class="btn btn-small btn-danger" type="button" data-delete-target-id="' + escapeHtml(item.id) + '">删除</button></div></td></tr>';
+      }).join('') : emptyRow(6, '还没有配置推送目标');
+      document.querySelectorAll('[data-edit-target-id]').forEach(function(button) {
+        button.addEventListener('click', function() { editTarget(button.dataset.editTargetId); });
+      });
+      document.querySelectorAll('[data-delete-target-id]').forEach(function(button) {
+        button.addEventListener('click', function() { deleteTarget(button.dataset.deleteTargetId); });
+      });
     }
     function renderTestTargets(items) {
       var sceneType = document.querySelector('#test-scene').value;
@@ -528,16 +573,19 @@
         output.textContent = '';
       }
       try {
-        var data = await api('/api/logs?after_id=' + runtimeLogCursor + '&limit=300');
-        var items = data.items || [];
-        if (items.length && (output.textContent === '暂无运行日志' || output.textContent.indexOf('日志加载失败：') === 0)) {
-          output.textContent = '';
+        for (var pageNumber = 0; pageNumber < 10; pageNumber++) {
+          var data = await api('/api/logs?after_id=' + runtimeLogCursor + '&limit=500');
+          var items = data.items || [];
+          if (items.length && (output.textContent === '暂无运行日志' || output.textContent.indexOf('日志加载失败：') === 0)) {
+            output.textContent = '';
+          }
+          var lines = items.map(function(item) {
+            runtimeLogCursor = Math.max(runtimeLogCursor, Number(item.id || 0));
+            return '[' + formatDate(item.timestamp) + '] ' + item.level + ' ' + item.logger + ' - ' + item.message;
+          });
+          if (lines.length) output.textContent += lines.join('\n') + '\n';
+          if (items.length < 500) break;
         }
-        items.forEach(function(item) {
-          var timestamp = formatDate(item.timestamp);
-          output.textContent += '[' + timestamp + '] ' + item.level + ' ' + item.logger + ' - ' + item.message + '\n';
-          runtimeLogCursor = Math.max(runtimeLogCursor, Number(item.id || 0));
-        });
         if (!output.textContent) output.textContent = '暂无运行日志';
         output.scrollTop = output.scrollHeight;
       } catch (error) {
@@ -570,24 +618,99 @@
     function pushHistorySourceLabel(value) {
       return {bilibili: 'B站', yysls: '燕云官网'}[value] || '测试消息';
     }
-    async function refreshPushHistory() {
+    function groupPushHistoryItems(items) {
+      var groups = [];
+      var byKey = Object.create(null);
+      items.forEach(function(item) {
+        var groupKey = item.content_item_id ? 'content-' + item.content_item_id : 'record-' + item.id;
+        var group = byKey[groupKey];
+        if (!group) {
+          group = {
+            key: groupKey,
+            title: item.title || '未命名内容',
+            source_type: item.source_type,
+            latest_at: item.created_at,
+            items: [],
+            latestByTarget: Object.create(null),
+            targetCount: 0
+          };
+          byKey[groupKey] = group;
+          groups.push(group);
+        }
+        group.items.push(item);
+        var targetKey = item.delivery_target_id
+          ? 'target-' + item.delivery_target_id
+          : String(item.scene_type || '') + ':' + String(item.target_openid || '');
+        if (!group.latestByTarget[targetKey]) {
+          group.latestByTarget[targetKey] = item;
+          group.targetCount += 1;
+        }
+      });
+      return groups;
+    }
+    function pushHistoryGroupStatusSummary(group) {
+      var counts = {sent: 0, failed: 0, processing: 0};
+      Object.keys(group.latestByTarget).forEach(function(key) {
+        var status = group.latestByTarget[key].status;
+        if (Object.prototype.hasOwnProperty.call(counts, status)) counts[status] += 1;
+      });
+      var html = [];
+      if (counts.sent) html.push('<span class="chip chip-green">成功 ' + counts.sent + '</span>');
+      if (counts.failed) html.push('<span class="chip chip-red">失败 ' + counts.failed + '</span>');
+      if (counts.processing) html.push('<span class="chip chip-orange">发送中 ' + counts.processing + '</span>');
+      return html.length ? html.join('') : '<span class="chip chip-gray">无记录</span>';
+    }
+    function renderPushHistoryChild(item, groupKey, isExpanded) {
+      var targetName = item.target_display_name || (item.scene_type === 'group' ? '未获取群名称' : '未获取昵称');
+      var messageInfo = item.qq_message_id
+        ? '<details class="history-message-details" data-history-id="' + escapeHtml(item.id) + '"' + (expandedPushHistoryIds[String(item.id)] ? ' open' : '') + '><summary>查看消息 ID</summary><div class="history-message-fields"><div class="history-message-field"><span class="history-message-label">message_id</span><code>' + escapeHtml(item.qq_message_id) + '</code></div><div class="history-message-field"><span class="history-message-label">trace_id</span><code>' + escapeHtml(item.qq_trace_id || '--') + '</code></div></div></details>'
+        : '<span class="secondary-text">暂无消息 ID</span>';
+      var error = item.error ? '<div class="history-error">' + escapeHtml(item.error) + '</div>' : '';
+      var targetType = item.scene_type === 'group' ? '群聊' : '单聊';
+      return '<tr class="history-child-row" data-history-parent="' + escapeHtml(groupKey) + '"' + (isExpanded ? '' : ' hidden') + '><td><span class="history-tree-branch" aria-hidden="true">↳</span></td><td><div class="history-time">' + formatDate(item.created_at) + '</div></td><td><div class="history-child-content"><div class="history-child-name"><div class="primary-text">' + escapeHtml(targetName) + '</div><div class="secondary-text history-meta">' + targetType + ' · ' + escapeHtml(maskOpenId(item.target_openid)) + (item.attempt_number ? ' · 第 ' + escapeHtml(item.attempt_number) + ' 次尝试' : '') + '</div></div></div></td><td>' + escapeHtml(pushHistoryTriggerLabel(item.trigger_type)) + '</td><td>' + chip(pushHistoryStatusLabel(item.status), pushHistoryStatusTone(item.status)) + error + '</td><td>' + messageInfo + '</td></tr>';
+    }
+    async function refreshPushHistory(forceRefresh) {
       if (pushHistoryRequestInFlight) return;
+      if (!forceRefresh && (document.querySelector('#push-history-table details[open]') || document.querySelector('#push-history-table [data-history-toggle][aria-expanded="true"]'))) return;
       pushHistoryRequestInFlight = true;
       try {
         var status = document.querySelector('#push-history-status').value;
         var url = '/api/push-history?limit=200' + (status ? '&status=' + encodeURIComponent(status) : '');
         var data = await api(url);
         var counts = data.counts || {};
-        document.querySelector('#push-history-summary').textContent = '成功 ' + (counts.sent || 0) + ' · 失败 ' + (counts.failed || 0) + ' · 发送中 ' + (counts.processing || 0) + '（每 3 秒刷新）';
+        document.querySelector('#push-history-summary').textContent = '成功 ' + (counts.sent || 0) + ' · 失败 ' + (counts.failed || 0) + ' · 发送中 ' + (counts.processing || 0) + '（每 3 秒刷新，展开树或 ID 时暂停）';
         var items = data.items || [];
-        document.querySelector('#push-history-table').innerHTML = items.length ? items.map(function(item) {
-          var targetName = item.target_display_name || (item.scene_type === 'group' ? '未获取群名称' : '未获取昵称');
-          var messageInfo = item.qq_message_id
-            ? '<div class="primary-text">message_id：' + escapeHtml(item.qq_message_id) + '</div><div class="secondary-text">trace_id：' + escapeHtml(item.qq_trace_id || '--') + '</div>'
-            : '<span class="secondary-text">暂无消息 ID</span>';
-          var error = item.error ? '<div class="secondary-text">' + escapeHtml(item.error) + '</div>' : '';
-          return '<tr><td>' + formatDate(item.created_at) + '</td><td><div class="primary-text">' + escapeHtml(item.title || '未命名内容') + '</div><div class="secondary-text">' + escapeHtml(pushHistorySourceLabel(item.source_type)) + ' · 第 ' + escapeHtml(item.attempt_number || 1) + ' 次尝试</div></td><td><div class="primary-text">' + escapeHtml(targetName) + '</div><div class="secondary-text">' + escapeHtml(item.scene_type === 'group' ? '群聊' : '单聊') + ' · ' + escapeHtml(maskOpenId(item.target_openid)) + '</div></td><td>' + escapeHtml(pushHistoryTriggerLabel(item.trigger_type)) + '</td><td>' + chip(pushHistoryStatusLabel(item.status), pushHistoryStatusTone(item.status)) + error + '</td><td>' + messageInfo + '</td></tr>';
+        var groups = groupPushHistoryItems(items);
+        document.querySelector('#push-history-table').innerHTML = groups.length ? groups.map(function(group) {
+          var isExpanded = Boolean(expandedPushGroupIds[group.key]);
+          var rootMeta = escapeHtml(pushHistorySourceLabel(group.source_type)) + ' · ' + group.targetCount + ' 个接收对象 · ' + group.items.length + ' 条发送记录';
+          var rows = '<tr class="history-group-row"><td><button class="history-tree-toggle" type="button" data-history-toggle="' + escapeHtml(group.key) + '" aria-expanded="' + String(isExpanded) + '" aria-label="' + (isExpanded ? '收起' : '展开') + '接收对象">' + (isExpanded ? '▾' : '▸') + '</button></td><td><div class="history-time">' + formatDate(group.latest_at) + '</div></td><td><span class="primary-text history-root-title">' + escapeHtml(group.title) + '</span><div class="history-root-meta">' + rootMeta + '</div></td><td><span class="secondary-text">--</span></td><td><div class="history-group-summary">' + pushHistoryGroupStatusSummary(group) + '</div></td><td><span class="secondary-text">展开后查看发送对象和消息 ID</span></td></tr>';
+          group.items.forEach(function(item) {
+            rows += renderPushHistoryChild(item, group.key, isExpanded);
+          });
+          return rows;
         }).join('') : emptyRow(6, '暂无推送记录');
+        document.querySelectorAll('#push-history-table [data-history-toggle]').forEach(function(button) {
+          button.addEventListener('click', function() {
+            var groupKey = button.dataset.historyToggle;
+            var isExpanded = button.getAttribute('aria-expanded') !== 'true';
+            button.setAttribute('aria-expanded', String(isExpanded));
+            button.setAttribute('aria-label', (isExpanded ? '收起' : '展开') + '接收对象');
+            button.textContent = isExpanded ? '▾' : '▸';
+            if (isExpanded) expandedPushGroupIds[groupKey] = true;
+            else delete expandedPushGroupIds[groupKey];
+            document.querySelectorAll('#push-history-table [data-history-parent]').forEach(function(row) {
+              if (row.dataset.historyParent === groupKey) row.hidden = !isExpanded;
+            });
+          });
+        });
+        document.querySelectorAll('#push-history-table details[data-history-id]').forEach(function(details) {
+          details.addEventListener('toggle', function() {
+            var historyId = details.dataset.historyId;
+            if (details.open) expandedPushHistoryIds[historyId] = true;
+            else delete expandedPushHistoryIds[historyId];
+          });
+        });
       } catch (error) {
         document.querySelector('#push-history-table').innerHTML = emptyRow(6, '加载失败：' + escapeHtml(error.message));
       } finally {
@@ -723,19 +846,52 @@
         await refreshDashboard();
       } catch (error) { setNotice(error.message, 'error'); }
     }
+    function resetSubscriptionForm() {
+      var form = document.querySelector('#bili-form');
+      form.reset();
+      editingSubscriptionUid = null;
+      document.querySelector('#uid').readOnly = false;
+      document.querySelector('#bili-interval').value = 300;
+      document.querySelector('#bili-enabled').value = 'true';
+      document.querySelector('#bili-form-title').textContent = '添加 UP 主';
+      document.querySelector('#bili-save-button').textContent = '保存订阅';
+      document.querySelector('#bili-cancel-edit').hidden = true;
+    }
+    function editSubscription(uid) {
+      var item = ((dashboardState && dashboardState.subscriptions) || []).find(function(row) {
+        return Number(row.uid) === Number(uid);
+      });
+      if (!item) return;
+      editingSubscriptionUid = Number(item.uid);
+      document.querySelector('#uid').value = item.uid;
+      document.querySelector('#uid').readOnly = true;
+      document.querySelector('#display-name').value = item.display_name || '';
+      document.querySelector('#bili-interval').value = item.poll_interval_seconds || 300;
+      document.querySelector('#filter-types').value = (item.filter_types || []).join(', ');
+      document.querySelector('#filter-keywords').value = (item.filter_keywords || []).join(', ');
+      document.querySelector('#bili-enabled').value = item.enabled ? 'true' : 'false';
+      document.querySelector('#bili-form-title').textContent = '编辑 UP 主订阅';
+      document.querySelector('#bili-save-button').textContent = '更新订阅';
+      document.querySelector('#bili-cancel-edit').hidden = false;
+    }
     async function saveSubscription(event) {
       event.preventDefault();
+      var uid = Number(document.querySelector('#uid').value);
+      var isEditing = editingSubscriptionUid !== null;
+      var payload = {
+        uid: uid,
+        display_name: document.querySelector('#display-name').value,
+        poll_interval_seconds: Number(document.querySelector('#bili-interval').value),
+        filter_types: document.querySelector('#filter-types').value.split(',').map(function(value) { return value.trim(); }).filter(Boolean),
+        filter_keywords: document.querySelector('#filter-keywords').value.split(',').map(function(value) { return value.trim(); }).filter(Boolean),
+        enabled: document.querySelector('#bili-enabled').value === 'true'
+      };
       try {
-        await api('/api/bilibili/subscriptions', {method: 'POST', body: JSON.stringify({
-          uid: Number(document.querySelector('#uid').value),
-          display_name: document.querySelector('#display-name').value,
-          poll_interval_seconds: Number(document.querySelector('#bili-interval').value),
-          filter_types: document.querySelector('#filter-types').value.split(',').map(function(value) { return value.trim(); }).filter(Boolean),
-          filter_keywords: document.querySelector('#filter-keywords').value.split(',').map(function(value) { return value.trim(); }).filter(Boolean)
-        })});
-        event.target.reset();
-        document.querySelector('#bili-interval').value = 300;
-        setNotice('B站 UP 主订阅已保存。', 'success');
+        await api(isEditing ? '/api/bilibili/subscriptions/' + editingSubscriptionUid : '/api/bilibili/subscriptions', {
+          method: isEditing ? 'PUT' : 'POST', body: JSON.stringify(payload)
+        });
+        resetSubscriptionForm();
+        setNotice(isEditing ? 'B站 UP 主订阅已更新。' : 'B站 UP 主订阅已保存。', 'success');
         await refreshDashboard();
       } catch (error) { setNotice(error.message, 'error'); }
     }
@@ -743,21 +899,66 @@
       if (!window.confirm('确认删除 UID ' + uid + ' 的订阅吗？')) return;
       try {
         await api('/api/bilibili/subscriptions/' + uid, {method: 'DELETE'});
+        if (editingSubscriptionUid === Number(uid)) resetSubscriptionForm();
         setNotice('订阅已删除。', 'success');
+        await refreshDashboard();
+      } catch (error) { setNotice(error.message, 'error'); }
+    }
+    function resetSourceForm() {
+      document.querySelector('#source-form').reset();
+      editingSourceId = null;
+      document.querySelector('#source-key').readOnly = false;
+      document.querySelector('#source-enabled').value = 'true';
+      document.querySelector('#source-form-title').textContent = '添加官网来源';
+      document.querySelector('#source-save-button').textContent = '保存来源';
+      document.querySelector('#source-cancel-edit').hidden = true;
+    }
+    function editSource(sourceId) {
+      var item = ((dashboardState && dashboardState.sources) || []).find(function(row) {
+        return Number(row.id) === Number(sourceId) && row.source_type === 'yysls';
+      });
+      if (!item) return;
+      editingSourceId = Number(item.id);
+      document.querySelector('#source-key').value = item.source_key;
+      document.querySelector('#source-key').readOnly = true;
+      document.querySelector('#source-name').value = item.name || '';
+      document.querySelector('#source-category').value = item.category || '';
+      document.querySelector('#source-url').value = item.url || '';
+      document.querySelector('#source-interval').value = item.poll_interval_seconds || 600;
+      document.querySelector('#source-enabled').value = item.enabled ? 'true' : 'false';
+      document.querySelector('#source-form-title').textContent = '编辑官网来源';
+      document.querySelector('#source-save-button').textContent = '更新来源';
+      document.querySelector('#source-cancel-edit').hidden = false;
+    }
+    async function deleteSource(sourceId) {
+      var item = ((dashboardState && dashboardState.sources) || []).find(function(row) {
+        return Number(row.id) === Number(sourceId);
+      });
+      if (!item || !window.confirm('确认删除官网来源“' + item.name + '”吗？已采集内容和推送记录会保留。')) return;
+      try {
+        await api('/api/sources/' + sourceId, {method: 'DELETE'});
+        if (editingSourceId === Number(sourceId)) resetSourceForm();
+        setNotice('官网来源已删除，相关历史记录已保留。', 'success');
         await refreshDashboard();
       } catch (error) { setNotice(error.message, 'error'); }
     }
     async function saveSource(event) {
       event.preventDefault();
+      var isEditing = editingSourceId !== null;
+      var payload = {
+        name: document.querySelector('#source-name').value,
+        url: document.querySelector('#source-url').value,
+        category: document.querySelector('#source-category').value,
+        poll_interval_seconds: Number(document.querySelector('#source-interval').value),
+        enabled: document.querySelector('#source-enabled').value === 'true'
+      };
+      if (!isEditing) payload.source_key = document.querySelector('#source-key').value;
       try {
-        await api('/api/sources', {method: 'POST', body: JSON.stringify({
-          source_key: document.querySelector('#source-key').value,
-          name: document.querySelector('#source-name').value,
-          url: document.querySelector('#source-url').value,
-          category: document.querySelector('#source-category').value,
-          poll_interval_seconds: Number(document.querySelector('#source-interval').value)
-        })});
-        setNotice('官网来源已保存。', 'success');
+        await api(isEditing ? '/api/sources/' + editingSourceId : '/api/sources', {
+          method: isEditing ? 'PUT' : 'POST', body: JSON.stringify(payload)
+        });
+        resetSourceForm();
+        setNotice(isEditing ? '官网来源已更新。' : '官网来源已保存。', 'success');
         await refreshDashboard();
       } catch (error) { setNotice(error.message, 'error'); }
     }
@@ -811,17 +1012,67 @@
         button.textContent = originalText;
       }
     }
+    function resetTargetForm() {
+      var scene = document.querySelector('#scene');
+      var openid = document.querySelector('#openid');
+      scene.disabled = false;
+      openid.readOnly = false;
+      document.querySelector('#target-form').reset();
+      editingTargetId = null;
+      document.querySelector('#target-enabled').value = 'true';
+      document.querySelector('#target-form-title').textContent = '手动新增目标';
+      document.querySelector('#target-save-button').textContent = '保存推送目标';
+      document.querySelector('#target-cancel-edit').hidden = true;
+    }
+    function editTarget(targetId) {
+      var item = ((dashboardState && dashboardState.targets) || []).find(function(row) {
+        return Number(row.id) === Number(targetId);
+      });
+      if (!item) return;
+      editingTargetId = Number(item.id);
+      document.querySelector('#scene').value = item.scene_type;
+      document.querySelector('#scene').disabled = true;
+      document.querySelector('#openid').value = item.target_openid;
+      document.querySelector('#openid').readOnly = true;
+      document.querySelector('#target-display-name').value = item.display_name || '';
+      document.querySelector('#target-enabled').value = item.enabled ? 'true' : 'false';
+      document.querySelector('#message-mode').value = item.message_mode || 'image';
+      document.querySelector('#target-form-title').textContent = '编辑推送目标';
+      document.querySelector('#target-save-button').textContent = '更新目标';
+      document.querySelector('#target-cancel-edit').hidden = false;
+    }
+    async function deleteTarget(targetId) {
+      var item = ((dashboardState && dashboardState.targets) || []).find(function(row) {
+        return Number(row.id) === Number(targetId);
+      });
+      if (!item) return;
+      var name = item.display_name || item.target_openid;
+      if (!window.confirm('确认删除推送目标“' + name + '”吗？未发送任务会终止，历史记录会保留。')) return;
+      try {
+        await api('/api/targets/' + targetId, {method: 'DELETE'});
+        if (editingTargetId === Number(targetId)) resetTargetForm();
+        setNotice('推送目标已删除，历史记录已保留。', 'success');
+        await refreshDashboard();
+      } catch (error) { setNotice(error.message, 'error'); }
+    }
     async function saveTarget(event) {
       event.preventDefault();
+      var isEditing = editingTargetId !== null;
+      var payload = {
+        display_name: document.querySelector('#target-display-name').value,
+        enabled: document.querySelector('#target-enabled').value === 'true',
+        message_mode: document.querySelector('#message-mode').value
+      };
+      if (!isEditing) {
+        payload.scene_type = document.querySelector('#scene').value;
+        payload.target_openid = document.querySelector('#openid').value;
+      }
       try {
-        await api('/api/targets', {method: 'POST', body: JSON.stringify({
-          scene_type: document.querySelector('#scene').value,
-          target_openid: document.querySelector('#openid').value,
-          display_name: document.querySelector('#target-display-name').value,
-          message_mode: document.querySelector('#message-mode').value
-        })});
-        event.target.reset();
-        setNotice('推送目标已保存。', 'success');
+        await api(isEditing ? '/api/targets/' + editingTargetId : '/api/targets', {
+          method: isEditing ? 'PUT' : 'POST', body: JSON.stringify(payload)
+        });
+        resetTargetForm();
+        setNotice(isEditing ? '推送目标已更新。' : '推送目标已保存。', 'success');
         await refreshDashboard();
       } catch (error) { setNotice(error.message, 'error'); }
     }
@@ -948,18 +1199,21 @@
     document.querySelector('#poll-login-button').addEventListener('click', pollLogin);
     document.querySelector('#cookie-form').addEventListener('submit', saveCookie);
     document.querySelector('#bili-form').addEventListener('submit', saveSubscription);
+    document.querySelector('#bili-cancel-edit').addEventListener('click', resetSubscriptionForm);
     document.querySelector('#source-form').addEventListener('submit', saveSource);
+    document.querySelector('#source-cancel-edit').addEventListener('click', resetSourceForm);
     document.querySelector('#qq-form').addEventListener('submit', saveQQ);
     document.querySelector('#qq-test-form').addEventListener('submit', testQQ);
     document.querySelector('#test-scene').addEventListener('change', function() {
       renderTestTargets((dashboardState && dashboardState.targets) || []);
     });
     document.querySelector('#target-form').addEventListener('submit', saveTarget);
+    document.querySelector('#target-cancel-edit').addEventListener('click', resetTargetForm);
     document.querySelector('#binding-form').addEventListener('submit', createBinding);
     document.querySelector('#binding-cancel-button').addEventListener('click', cancelBinding);
     document.querySelector('#logs-refresh-button').addEventListener('click', function() { refreshRuntimeLogs(true); });
-    document.querySelector('#push-history-refresh-button').addEventListener('click', refreshPushHistory);
-    document.querySelector('#push-history-status').addEventListener('change', refreshPushHistory);
+    document.querySelector('#push-history-refresh-button').addEventListener('click', function() { refreshPushHistory(true); });
+    document.querySelector('#push-history-status').addEventListener('change', function() { refreshPushHistory(true); });
     refreshDashboard();
   </script>
 </body>

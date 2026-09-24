@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from yysls_news.collectors.bilibili.client import BilibiliClient
 from yysls_news.collectors.bilibili.lifecycle import BilibiliCredentialLifecycle
 from yysls_news.collectors.bilibili.parser import (
+    extract_items,
     extract_new_items,
     matches_filters,
     parse_dynamic,
@@ -39,6 +41,12 @@ class BilibiliIngestionService:
     async def poll(self, subscription: dict[str, Any]) -> PollResult:
         uid = int(subscription["uid"])
         source_key = str(uid)
+        started = time.monotonic()
+        LOGGER.info(
+            "B站轮询开始: uid=%s cursor=%s",
+            uid,
+            subscription.get("last_dynamic_id") or "-",
+        )
         try:
             raw = await self.client.get_latest_dynamics(uid)
             items = extract_new_items(
@@ -47,12 +55,23 @@ class BilibiliIngestionService:
                 recent_dynamic_ids=subscription.get("recent_dynamic_ids") or [],
             )
             ids = _dynamic_ids(items)
+            LOGGER.info(
+                "B站结构化接口返回: uid=%s total=%s new=%s",
+                uid,
+                len(extract_items(raw)),
+                len(items),
+            )
             if not items:
                 self.subscriptions.update_cursor(
                     uid,
                     str(subscription.get("last_dynamic_id") or ""),
                     list(subscription.get("recent_dynamic_ids") or []),
                     _next_poll(subscription["poll_interval_seconds"]),
+                )
+                LOGGER.info(
+                    "B站轮询完成: uid=%s discovered=0 duration_ms=%s",
+                    uid,
+                    int((time.monotonic() - started) * 1000),
                 )
                 return PollResult(source_key=source_key)
 
@@ -67,10 +86,17 @@ class BilibiliIngestionService:
                     _merge_recent(ids, subscription.get("recent_dynamic_ids") or []),
                     _next_poll(subscription["poll_interval_seconds"]),
                 )
+                LOGGER.info(
+                    "B站订阅基线已建立: uid=%s discovered=%s duration_ms=%s",
+                    uid,
+                    len(items),
+                    int((time.monotonic() - started) * 1000),
+                )
                 return PollResult(source_key=source_key, discovered=len(items))
 
             inserted = 0
             delivery_tasks = 0
+            skipped = 0
             for item in reversed(items):
                 model = parse_dynamic(item, uid)
                 if not model or not matches_filters(
@@ -78,6 +104,7 @@ class BilibiliIngestionService:
                     subscription.get("filter_types") or [],
                     subscription.get("filter_keywords") or [],
                 ):
+                    skipped += 1
                     continue
                 _, was_inserted, task_count = self.contents.insert_with_outbox(
                     to_normalized_content(model)
@@ -91,6 +118,15 @@ class BilibiliIngestionService:
                 _merge_recent(ids, subscription.get("recent_dynamic_ids") or []),
                 _next_poll(subscription["poll_interval_seconds"]),
             )
+            LOGGER.info(
+                "B站轮询完成: uid=%s discovered=%s inserted=%s tasks=%s skipped=%s duration_ms=%s",
+                uid,
+                len(items),
+                inserted,
+                delivery_tasks,
+                skipped,
+                int((time.monotonic() - started) * 1000),
+            )
             return PollResult(
                 source_key=source_key,
                 discovered=len(items),
@@ -99,7 +135,12 @@ class BilibiliIngestionService:
             )
         except Exception as exc:
             message = f"{type(exc).__name__}: {exc}"
-            LOGGER.warning("B站 UID=%s 轮询失败: %s", uid, type(exc).__name__)
+            LOGGER.warning(
+                "B站轮询失败: uid=%s error=%s duration_ms=%s",
+                uid,
+                type(exc).__name__,
+                int((time.monotonic() - started) * 1000),
+            )
             self.subscriptions.update_error(
                 uid,
                 message[:500],
@@ -123,6 +164,13 @@ class YyslsIngestionService:
 
     async def poll(self, source: dict[str, Any]) -> PollResult:
         source_key = str(source["source_key"])
+        started = time.monotonic()
+        LOGGER.info(
+            "官网轮询开始: source=%s category=%s bootstrap=%s",
+            source_key,
+            source.get("category") or "最新",
+            not source.get("last_success_at"),
+        )
         try:
             items = await self.client.discover(
                 list_url=str(source["url"]),
@@ -164,6 +212,17 @@ class YyslsIngestionService:
                 _next_poll(source["poll_interval_seconds"]),
                 error,
             )
+            LOGGER.info(
+                "官网轮询完成: source=%s fetched=%s discovered=%s inserted=%s "
+                "tasks=%s errors=%s duration_ms=%s",
+                source_key,
+                len(items),
+                discovered,
+                inserted,
+                delivery_tasks,
+                len(errors),
+                int((time.monotonic() - started) * 1000),
+            )
             return PollResult(
                 source_key=source_key,
                 discovered=discovered,
@@ -173,7 +232,12 @@ class YyslsIngestionService:
             )
         except Exception as exc:
             message = f"{type(exc).__name__}: {exc}"
-            LOGGER.warning("官网来源=%s 轮询失败: %s", source_key, type(exc).__name__)
+            LOGGER.warning(
+                "官网轮询失败: source=%s error=%s duration_ms=%s",
+                source_key,
+                type(exc).__name__,
+                int((time.monotonic() - started) * 1000),
+            )
             self.sources.update_poll_state(
                 int(source["id"]),
                 _next_poll(source["poll_interval_seconds"]),
@@ -204,6 +268,7 @@ class MonitorService:
         self.timeout_seconds = timeout_seconds
         self.bili_proxy = bili_proxy
         self.credential_lifecycle = credential_lifecycle
+        self._bili_paused = False
 
     async def poll_once(self, force: bool = False) -> list[PollResult]:
         results: list[PollResult] = []
@@ -214,6 +279,17 @@ class MonitorService:
         if credential and self.credential_lifecycle:
             if not await self.credential_lifecycle.ensure_valid():
                 credential = None
+        if subscription_rows and not credential:
+            if not self._bili_paused:
+                LOGGER.info(
+                    "B站轮询暂停: enabled_subscriptions=%s 登录态不可用",
+                    len(subscription_rows),
+                )
+            self._bili_paused = True
+        elif self._bili_paused:
+            if subscription_rows:
+                LOGGER.info("B站轮询恢复: enabled_subscriptions=%s", len(subscription_rows))
+            self._bili_paused = False
         if subscription_rows and credential:
             bili_client = BilibiliClient(credential=credential, proxy=self.bili_proxy)
             bili_service = BilibiliIngestionService(bili_client, self.subscriptions, self.contents)

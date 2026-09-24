@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
+
+LOGGER = logging.getLogger(__name__)
 
 
 class BilibiliDependencyError(RuntimeError):
@@ -42,6 +45,13 @@ class BilibiliClient:
             instance = user.User(uid=uid, credential=self.credential)
             return await instance.get_dynamics_new()
         except Exception as exc:
+            LOGGER.warning(
+                "B站动态接口失败: uid=%s error=%s code=%s HTTP=%s",
+                uid,
+                type(exc).__name__,
+                getattr(exc, "code", None),
+                getattr(getattr(exc, "response", None), "status_code", None),
+            )
             raise BilibiliDependencyError(f"获取 UID={uid} 动态失败: {type(exc).__name__}") from exc
 
     async def get_user_info(self, uid: int) -> dict[str, Any]:
@@ -51,4 +61,11 @@ class BilibiliClient:
             instance = user.User(uid=uid, credential=self.credential)
             return await instance.get_user_info()
         except Exception as exc:
+            LOGGER.warning(
+                "B站用户资料接口失败: uid=%s error=%s code=%s HTTP=%s",
+                uid,
+                type(exc).__name__,
+                getattr(exc, "code", None),
+                getattr(getattr(exc, "response", None), "status_code", None),
+            )
             raise BilibiliDependencyError(f"获取 UID={uid} 资料失败: {type(exc).__name__}") from exc

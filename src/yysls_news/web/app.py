@@ -43,9 +43,23 @@ class YyslsSourceInput(BaseModel):
     poll_interval_seconds: int = Field(default=600, ge=60)
 
 
+class YyslsSourceUpdateInput(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    url: str = Field(min_length=10, max_length=500)
+    category: str = "最新"
+    enabled: bool = True
+    poll_interval_seconds: int = Field(default=600, ge=60)
+
+
 class DeliveryTargetInput(BaseModel):
     scene_type: SceneType
     target_openid: str = Field(min_length=1, max_length=200)
+    display_name: str = Field(default="", max_length=200)
+    enabled: bool = True
+    message_mode: MessageMode = MessageMode.IMAGE
+
+
+class DeliveryTargetUpdateInput(BaseModel):
     display_name: str = Field(default="", max_length=200)
     enabled: bool = True
     message_mode: MessageMode = MessageMode.IMAGE
@@ -217,11 +231,7 @@ def create_app(context: ApplicationContext | None = None) -> FastAPI:
     async def list_subscriptions(_: None = Depends(require_admin)) -> list[dict[str, Any]]:
         return await _enrich_subscription_names(context, context.subscriptions.list_all())
 
-    @app.post("/api/bilibili/subscriptions")
-    async def save_subscription(
-        payload: BilibiliSubscriptionInput,
-        _: None = Depends(require_admin),
-    ) -> dict[str, Any]:
+    async def persist_subscription(payload: BilibiliSubscriptionInput) -> dict[str, Any]:
         display_name = payload.display_name.strip()
         if not display_name:
             try:
@@ -246,9 +256,29 @@ def create_app(context: ApplicationContext | None = None) -> FastAPI:
         )
         return next(item for item in context.subscriptions.list_all() if item["uid"] == payload.uid)
 
+    @app.post("/api/bilibili/subscriptions")
+    async def save_subscription(
+        payload: BilibiliSubscriptionInput,
+        _: None = Depends(require_admin),
+    ) -> dict[str, Any]:
+        return await persist_subscription(payload)
+
+    @app.put("/api/bilibili/subscriptions/{uid}")
+    async def update_subscription(
+        uid: int,
+        payload: BilibiliSubscriptionInput,
+        _: None = Depends(require_admin),
+    ) -> dict[str, Any]:
+        if uid != payload.uid:
+            raise HTTPException(status_code=400, detail="路径 UID 与订阅 UID 不一致")
+        if not any(int(item["uid"]) == uid for item in context.subscriptions.list_all()):
+            raise HTTPException(status_code=404, detail="B站订阅不存在")
+        return await persist_subscription(payload)
+
     @app.delete("/api/bilibili/subscriptions/{uid}")
     async def delete_subscription(uid: int, _: None = Depends(require_admin)) -> dict[str, bool]:
-        context.subscriptions.delete(uid)
+        if not context.subscriptions.delete(uid):
+            raise HTTPException(status_code=404, detail="B站订阅不存在")
         return {"deleted": True}
 
     @app.get("/api/bilibili/login/status")
@@ -333,6 +363,39 @@ def create_app(context: ApplicationContext | None = None) -> FastAPI:
             for item in context.sources.list_all("yysls")
             if item["source_key"] == payload.source_key
         )
+
+    @app.put("/api/sources/{source_id}")
+    async def update_source(
+        source_id: int,
+        payload: YyslsSourceUpdateInput,
+        _: None = Depends(require_admin),
+    ) -> dict[str, Any]:
+        if not payload.url.startswith(("http://", "https://")):
+            raise HTTPException(status_code=400, detail="来源 URL 必须是 HTTP(S) 地址")
+        if not context.sources.update(
+            source_id=source_id,
+            source_type="yysls",
+            name=payload.name,
+            url=payload.url,
+            category=payload.category,
+            enabled=payload.enabled,
+            poll_interval_seconds=payload.poll_interval_seconds,
+        ):
+            raise HTTPException(status_code=404, detail="官网来源不存在")
+        return next(
+            item
+            for item in context.sources.list_all("yysls")
+            if int(item["id"]) == source_id
+        )
+
+    @app.delete("/api/sources/{source_id}")
+    async def delete_source(
+        source_id: int,
+        _: None = Depends(require_admin),
+    ) -> dict[str, bool]:
+        if not context.sources.delete(source_id, "yysls"):
+            raise HTTPException(status_code=404, detail="官网来源不存在")
+        return {"deleted": True}
 
     @app.get("/api/targets")
     async def list_targets(_: None = Depends(require_admin)) -> list[dict[str, Any]]:
@@ -436,6 +499,30 @@ def create_app(context: ApplicationContext | None = None) -> FastAPI:
         )
         return {"id": target_id, **payload.model_dump(mode="json")}
 
+    @app.put("/api/targets/{target_id}")
+    async def update_target(
+        target_id: int,
+        payload: DeliveryTargetUpdateInput,
+        _: None = Depends(require_admin),
+    ) -> dict[str, Any]:
+        if not context.targets.update_settings(
+            target_id=target_id,
+            display_name=payload.display_name,
+            enabled=payload.enabled,
+            message_mode=payload.message_mode,
+        ):
+            raise HTTPException(status_code=404, detail="推送目标不存在")
+        return {"id": target_id, **payload.model_dump(mode="json")}
+
+    @app.delete("/api/targets/{target_id}")
+    async def delete_target(
+        target_id: int,
+        _: None = Depends(require_admin),
+    ) -> dict[str, bool]:
+        if not context.targets.delete(target_id):
+            raise HTTPException(status_code=404, detail="推送目标不存在")
+        return {"deleted": True}
+
     @app.get("/api/qqbot/config")
     async def qqbot_config(_: None = Depends(require_admin)) -> dict[str, str | bool]:
         return context.runtime_config.qqbot_public()
@@ -478,22 +565,48 @@ def create_app(context: ApplicationContext | None = None) -> FastAPI:
             target_openid=payload.target_openid,
             target_display_name=str(target.get("display_name") or "") if target else "",
         )
+        LOGGER.info(
+            "QQBot 测试消息开始: history=%s target=%s scene=%s",
+            history_id,
+            target["id"] if target else "unbound",
+            payload.scene_type.value,
+        )
         client = QQBotClient(config.base_url, config.app_id, config.app_secret)
         try:
             result = await client.send_text(
                 QQTarget(payload.scene_type.value, payload.target_openid), payload.content
             )
             context.push_history.mark_sent(history_id, result.message_id, result.trace_id)
+            LOGGER.info(
+                "QQBot 测试消息完成: history=%s message_id_tail=%s trace_id=%s",
+                history_id,
+                result.message_id[-8:] or "-",
+                result.trace_id or "-",
+            )
             return {"message_id": result.message_id, "trace_id": result.trace_id}
         except Exception as exc:
             context.push_history.mark_failed(history_id, f"{type(exc).__name__}: {exc}")
+            LOGGER.warning(
+                "QQBot 测试消息失败: history=%s error=%s HTTP=%s err_code=%s trace_id=%s",
+                history_id,
+                type(exc).__name__,
+                exc.http_status if isinstance(exc, QQBotApiError) else None,
+                exc.err_code if isinstance(exc, QQBotApiError) else None,
+                exc.trace_id if isinstance(exc, QQBotApiError) else "-",
+            )
             raise
         finally:
             await client.aclose()
 
     @app.post("/api/monitor/poll")
     async def manual_poll(_: None = Depends(require_admin)) -> dict[str, Any]:
+        LOGGER.info("管理员手动轮询开始")
         results = await context.monitor().poll_once(force=True)
+        LOGGER.info(
+            "管理员手动轮询完成: sources=%s failures=%s",
+            len(results),
+            sum(bool(result.error) for result in results),
+        )
         return {"results": [result.__dict__ for result in results]}
 
     return app

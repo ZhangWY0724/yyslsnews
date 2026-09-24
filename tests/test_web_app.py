@@ -55,7 +55,7 @@ def test_initial_admin_password_requires_change(tmp_path) -> None:
         assert client.get("/api/dashboard", auth=("admin", "new-password")).status_code == 200
         assert "系统总览" in client.get("/", auth=("admin", "new-password")).text
 
-        logging.getLogger("tests.runtime.logs").warning("运行日志测试记录")
+        logging.getLogger("yysls_news.tests.runtime.logs").warning("运行日志测试记录")
         logs = client.get("/api/logs", auth=("admin", "new-password"))
         assert logs.status_code == 200
         assert any(item["message"] == "运行日志测试记录" for item in logs.json()["items"])

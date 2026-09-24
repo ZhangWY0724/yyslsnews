@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import urlsplit
 
 from yysls_news.domain.models import BiliDynamicViewModel, NormalizedContent, SourceType
 
@@ -196,6 +197,27 @@ def _parse_forward_parts(dynamic: Any) -> _DynamicParts:
     return _DynamicParts(content=content_to_text(desc))
 
 
+def _opus_source_url(major: Any, dynamic_id: str) -> str:
+    """优先使用结构化接口给出的图文详情地址。"""
+    fallback = f"https://www.bilibili.com/opus/{dynamic_id}"
+    jump_url = _value(major, "opus", "jump_url")
+    if isinstance(jump_url, str) and jump_url.strip():
+        candidate = jump_url.strip()
+        if candidate.startswith("//"):
+            candidate = f"https:{candidate}"
+        try:
+            parsed = urlsplit(candidate)
+        except ValueError:
+            return fallback
+        if (
+            parsed.scheme == "https"
+            and parsed.hostname in {"www.bilibili.com", "bilibili.com"}
+            and parsed.path.startswith("/opus/")
+        ):
+            return candidate
+    return fallback
+
+
 def parse_dynamic(item: dict[str, Any], uid: int) -> BiliDynamicViewModel | None:
     dynamic_id = str(item.get("id_str") or item.get("id") or "")
     if not dynamic_id:
@@ -222,11 +244,12 @@ def parse_dynamic(item: dict[str, Any], uid: int) -> BiliDynamicViewModel | None
     published_at = _parse_datetime(_value(author, "pub_ts")) or _parse_datetime(
         _value(author, "pub_time")
     )
-    source_url = (
-        f"https://www.bilibili.com/opus/{dynamic_id}"
-        if dynamic_type == "DYNAMIC_TYPE_ARTICLE"
-        else f"https://t.bilibili.com/{dynamic_id}"
-    )
+    source_url = f"https://t.bilibili.com/{dynamic_id}"
+    if dynamic_type == "DYNAMIC_TYPE_ARTICLE" or (
+        dynamic_type in {"DYNAMIC_TYPE_DRAW", "DYNAMIC_TYPE_WORD"}
+        and isinstance(_value(major, "opus", default=None), dict)
+    ):
+        source_url = _opus_source_url(major, dynamic_id)
     archive = _value(major, "archive", default={})
     video_bvid = (
         _clean_text(_value(archive, "bvid"))

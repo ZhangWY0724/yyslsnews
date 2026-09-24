@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from yysls_news.domain.models import (
@@ -9,6 +10,8 @@ from yysls_news.domain.models import (
     SceneType,
 )
 from yysls_news.storage.database import Database, utc_now
+
+PROCESSING_LEASE_SECONDS = 600
 
 
 class AppSettingsRepository:
@@ -124,9 +127,12 @@ class BilibiliSubscriptionRepository:
             ).fetchall()
         return [self._deserialize(row) for row in rows]
 
-    def delete(self, uid: int) -> None:
+    def delete(self, uid: int) -> bool:
         with self.database.connect() as connection:
-            connection.execute("DELETE FROM bilibili_subscriptions WHERE uid = ?", (uid,))
+            cursor = connection.execute(
+                "DELETE FROM bilibili_subscriptions WHERE uid = ?", (uid,)
+            )
+        return cursor.rowcount == 1
 
     def update_display_name(self, uid: int, display_name: str) -> None:
         with self.database.connect() as connection:
@@ -207,7 +213,8 @@ class WatchSourceRepository:
                     url=excluded.url,
                     category=excluded.category,
                     enabled=excluded.enabled,
-                    poll_interval_seconds=excluded.poll_interval_seconds
+                    poll_interval_seconds=excluded.poll_interval_seconds,
+                    deleted_at=NULL
                 """,
                 (
                     source_type,
@@ -231,8 +238,51 @@ class WatchSourceRepository:
             ).fetchone()
         return row is not None
 
+    def update(
+        self,
+        source_id: int,
+        source_type: str,
+        name: str,
+        url: str,
+        category: str,
+        enabled: bool,
+        poll_interval_seconds: int,
+    ) -> bool:
+        with self.database.connect() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE watch_sources
+                SET name = ?, url = ?, category = ?, enabled = ?,
+                    poll_interval_seconds = ?
+                WHERE id = ? AND source_type = ?
+                  AND deleted_at IS NULL
+                """,
+                (
+                    name.strip(),
+                    url.strip(),
+                    category.strip(),
+                    int(enabled),
+                    max(poll_interval_seconds, 60),
+                    source_id,
+                    source_type,
+                ),
+            )
+        return cursor.rowcount == 1
+
+    def delete(self, source_id: int, source_type: str) -> bool:
+        with self.database.connect() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE watch_sources
+                SET enabled = 0, deleted_at = ?
+                WHERE id = ? AND source_type = ? AND deleted_at IS NULL
+                """,
+                (utc_now(), source_id, source_type),
+            )
+        return cursor.rowcount == 1
+
     def list_enabled(self, source_type: str | None = None) -> list[dict[str, Any]]:
-        query = "SELECT * FROM watch_sources WHERE enabled = 1"
+        query = "SELECT * FROM watch_sources WHERE enabled = 1 AND deleted_at IS NULL"
         params: tuple[Any, ...] = ()
         if source_type:
             query += " AND source_type = ?"
@@ -243,10 +293,10 @@ class WatchSourceRepository:
         return [dict(row) for row in rows]
 
     def list_all(self, source_type: str | None = None) -> list[dict[str, Any]]:
-        query = "SELECT * FROM watch_sources"
+        query = "SELECT * FROM watch_sources WHERE deleted_at IS NULL"
         params: tuple[Any, ...] = ()
         if source_type:
-            query += " WHERE source_type = ?"
+            query += " AND source_type = ?"
             params = (source_type,)
         query += " ORDER BY id"
         with self.database.connect() as connection:
@@ -299,7 +349,8 @@ class DeliveryTargetRepository:
                     END,
                     enabled=excluded.enabled,
                     message_mode=excluded.message_mode,
-                    updated_at=excluded.updated_at
+                    updated_at=excluded.updated_at,
+                    deleted_at=NULL
                 """,
                 (
                     scene_type.value,
@@ -327,20 +378,92 @@ class DeliveryTargetRepository:
                 """
                 UPDATE delivery_targets
                 SET display_name = ?, updated_at = ?
-                WHERE scene_type = ? AND target_openid = ?
+                WHERE scene_type = ? AND target_openid = ? AND deleted_at IS NULL
                 """,
                 (display_name.strip(), utc_now(), scene_type.value, target_openid),
             )
 
+    def get_by_id(self, target_id: int) -> dict[str, Any] | None:
+        with self.database.connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM delivery_targets WHERE id = ? AND deleted_at IS NULL",
+                (target_id,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def update_settings(
+        self,
+        target_id: int,
+        display_name: str,
+        enabled: bool,
+        message_mode: MessageMode,
+    ) -> bool:
+        with self.database.connect() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE delivery_targets
+                SET display_name = ?, enabled = ?, message_mode = ?, updated_at = ?
+                WHERE id = ? AND deleted_at IS NULL
+                """,
+                (
+                    display_name.strip(),
+                    int(enabled),
+                    message_mode.value,
+                    utc_now(),
+                    target_id,
+                ),
+            )
+        return cursor.rowcount == 1
+
+    def delete(self, target_id: int) -> bool:
+        now = utc_now()
+        with self.database.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                row = connection.execute(
+                    "SELECT id FROM delivery_targets "
+                    "WHERE id = ? AND deleted_at IS NULL",
+                    (target_id,),
+                ).fetchone()
+                if row is None:
+                    connection.execute("COMMIT")
+                    return False
+                connection.execute(
+                    """
+                    UPDATE delivery_tasks
+                    SET status = 'failed', last_error = '推送目标已删除',
+                        processing_started_at = NULL
+                    WHERE delivery_target_id = ?
+                      AND status IN ('pending', 'processing', 'retry')
+                    """,
+                    (target_id,),
+                )
+                connection.execute(
+                    """
+                    UPDATE delivery_targets
+                    SET enabled = 0, deleted_at = ?, updated_at = ?
+                    WHERE id = ? AND deleted_at IS NULL
+                    """,
+                    (now, now, target_id),
+                )
+                connection.execute("COMMIT")
+                return True
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+
     def list_all(self) -> list[dict[str, Any]]:
         with self.database.connect() as connection:
-            rows = connection.execute("SELECT * FROM delivery_targets ORDER BY id").fetchall()
+            rows = connection.execute(
+                "SELECT * FROM delivery_targets WHERE deleted_at IS NULL ORDER BY id"
+            ).fetchall()
         return [dict(row) for row in rows]
 
     def list_enabled(self) -> list[dict[str, Any]]:
         with self.database.connect() as connection:
             rows = connection.execute(
-                "SELECT * FROM delivery_targets WHERE enabled = 1 ORDER BY id"
+                "SELECT * FROM delivery_targets "
+                "WHERE enabled = 1 AND deleted_at IS NULL ORDER BY id"
             ).fetchall()
         return [dict(row) for row in rows]
 
@@ -551,11 +674,133 @@ class ContentRepository:
         return [dict(row) for row in rows]
 
 
+class RenderArtifactRepository:
+    """为同一内容的所有图片推送任务共享渲染结果。"""
+
+    def __init__(self, database: Database) -> None:
+        self.database = database
+
+    def claim(self, content_id: int, version: int, lease_seconds: int = 600) -> dict[str, Any]:
+        now = utc_now()
+        stale_before = (datetime.now(timezone.utc) - timedelta(seconds=lease_seconds)).isoformat()
+        with self.database.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                row = connection.execute(
+                    "SELECT version, status, pages_json, last_error, updated_at "
+                    "FROM render_artifacts WHERE content_item_id = ?",
+                    (content_id,),
+                ).fetchone()
+                if row and int(row["version"]) == version:
+                    status = str(row["status"])
+                    if status == "ready":
+                        pages = self.database.loads(str(row["pages_json"]), [])
+                        if isinstance(pages, list) and pages:
+                            connection.execute("COMMIT")
+                            return {"status": "ready", "pages": pages}
+                    elif status == "failed":
+                        connection.execute("COMMIT")
+                        return {"status": "failed", "error": str(row["last_error"])}
+                    elif status == "rendering" and str(row["updated_at"]) >= stale_before:
+                        connection.execute("COMMIT")
+                        return {"status": "busy"}
+
+                connection.execute(
+                    """
+                    INSERT INTO render_artifacts(
+                        content_item_id, version, status, pages_json, last_error, updated_at
+                    ) VALUES (?, ?, 'rendering', '[]', '', ?)
+                    ON CONFLICT(content_item_id) DO UPDATE SET
+                        version=excluded.version,
+                        status=excluded.status,
+                        pages_json='[]',
+                        last_error='',
+                        updated_at=excluded.updated_at
+                    """,
+                    (content_id, version, now),
+                )
+                connection.execute("COMMIT")
+                return {"status": "claimed"}
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+
+    def mark_ready(self, content_id: int, version: int, pages: list[str]) -> None:
+        with self.database.connect() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE render_artifacts
+                SET status = 'ready', pages_json = ?, last_error = '', updated_at = ?
+                WHERE content_item_id = ? AND version = ? AND status = 'rendering'
+                """,
+                (self.database.dumps(pages), utc_now(), content_id, version),
+            )
+        if cursor.rowcount != 1:
+            raise RuntimeError("渲染产物状态已改变，无法保存图片")
+
+    def mark_failed(self, content_id: int, version: int, error: str) -> None:
+        with self.database.connect() as connection:
+            connection.execute(
+                """
+                UPDATE render_artifacts
+                SET status = 'failed', pages_json = '[]', last_error = ?, updated_at = ?
+                WHERE content_item_id = ? AND version = ? AND status = 'rendering'
+                """,
+                (error[:500], utc_now(), content_id, version),
+            )
+
+    def invalidate(self, content_id: int, version: int) -> None:
+        with self.database.connect() as connection:
+            connection.execute(
+                "DELETE FROM render_artifacts "
+                "WHERE content_item_id = ? AND version = ? AND status = 'ready'",
+                (content_id, version),
+            )
+
+    def cleanup_if_finished(self, content_id: int) -> list[str]:
+        """全部启用目标完成推送后，返回待清理的共享截图文件名。"""
+        with self.database.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                active = connection.execute(
+                    """
+                    SELECT 1 FROM delivery_tasks AS task
+                    JOIN delivery_targets AS target ON target.id = task.delivery_target_id
+                    WHERE task.content_item_id = ?
+                      AND task.status IN ('pending', 'processing', 'retry')
+                      AND target.enabled = 1
+                    LIMIT 1
+                    """,
+                    (content_id,),
+                ).fetchone()
+                if active:
+                    connection.execute("COMMIT")
+                    return []
+                row = connection.execute(
+                    "SELECT pages_json FROM render_artifacts WHERE content_item_id = ?",
+                    (content_id,),
+                ).fetchone()
+                connection.execute(
+                    "DELETE FROM render_artifacts WHERE content_item_id = ?",
+                    (content_id,),
+                )
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+        pages = self.database.loads(str(row["pages_json"]), []) if row else []
+        return [str(page) for page in pages] if isinstance(pages, list) else []
+
+
 class DeliveryTaskRepository:
     def __init__(self, database: Database) -> None:
         self.database = database
 
     def list_pending(self, limit: int = 20) -> list[dict[str, Any]]:
+        now = utc_now()
+        stale_before = (
+            datetime.now(timezone.utc) - timedelta(seconds=PROCESSING_LEASE_SECONDS)
+        ).isoformat()
         with self.database.connect() as connection:
             rows = connection.execute(
                 """
@@ -570,24 +815,38 @@ class DeliveryTaskRepository:
                 FROM delivery_tasks AS task
                 JOIN content_items ON content_items.id = task.content_item_id
                 JOIN delivery_targets ON delivery_targets.id = task.delivery_target_id
-                WHERE task.status IN ('pending', 'retry')
-                  AND (task.next_retry_at IS NULL OR task.next_retry_at <= ?)
+                WHERE (
+                    (task.status IN ('pending', 'retry')
+                     AND (task.next_retry_at IS NULL OR task.next_retry_at <= ?))
+                    OR (task.status = 'processing'
+                        AND (task.processing_started_at IS NULL
+                             OR task.processing_started_at <= ?))
+                )
                   AND delivery_targets.enabled = 1
                 ORDER BY task.created_at
                 LIMIT ?
                 """,
-                (utc_now(), limit),
+                (now, stale_before, limit),
             ).fetchall()
         return [dict(row) for row in rows]
 
     def mark_processing(self, task_id: int) -> bool:
+        now = utc_now()
+        stale_before = (
+            datetime.now(timezone.utc) - timedelta(seconds=PROCESSING_LEASE_SECONDS)
+        ).isoformat()
         with self.database.connect() as connection:
             cursor = connection.execute(
                 """
-                UPDATE delivery_tasks SET status = 'processing'
-                WHERE id = ? AND status IN ('pending', 'retry')
+                UPDATE delivery_tasks
+                SET status = 'processing', processing_started_at = ?
+                WHERE id = ? AND (
+                    status IN ('pending', 'retry')
+                    OR (status = 'processing'
+                        AND (processing_started_at IS NULL OR processing_started_at <= ?))
+                )
                 """,
-                (task_id,),
+                (now, task_id, stale_before),
             )
         return cursor.rowcount == 1
 
@@ -597,7 +856,7 @@ class DeliveryTaskRepository:
                 """
                 UPDATE delivery_tasks
                 SET status = 'sent', qq_message_id = ?, qq_trace_id = ?,
-                    last_error = '', sent_at = ?
+                    last_error = '', sent_at = ?, processing_started_at = NULL
                 WHERE id = ?
                 """,
                 (message_id, trace_id, utc_now(), task_id),
@@ -608,7 +867,8 @@ class DeliveryTaskRepository:
             connection.execute(
                 """
                 UPDATE delivery_tasks
-                SET status = 'retry', retry_count = ?, next_retry_at = ?, last_error = ?
+                SET status = 'retry', retry_count = ?, next_retry_at = ?,
+                    last_error = ?, processing_started_at = NULL
                 WHERE id = ?
                 """,
                 (retry_count, next_retry_at, error, task_id),
@@ -619,7 +879,8 @@ class DeliveryTaskRepository:
             connection.execute(
                 """
                 UPDATE delivery_tasks
-                SET status = 'failed', retry_count = ?, last_error = ?
+                SET status = 'failed', retry_count = ?, last_error = ?,
+                    processing_started_at = NULL
                 WHERE id = ?
                 """,
                 (retry_count, error, task_id),

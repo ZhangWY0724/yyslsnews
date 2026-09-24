@@ -101,6 +101,7 @@ def test_parse_opus_summary_for_filter() -> None:
         {
             "major": {
                 "opus": {
+                    "jump_url": "//www.bilibili.com/opus/opus",
                     "title": "今日分享",
                     "summary": {"text": "[doge] 看看这个"},
                 }
@@ -113,6 +114,7 @@ def test_parse_opus_summary_for_filter() -> None:
     assert model is not None
     assert model.title == "今日分享"
     assert model.content == "[doge] 看看这个"
+    assert model.source_url == "https://www.bilibili.com/opus/opus"
 
 
 def test_parse_word_and_article_use_their_type_specific_fallback_fields() -> None:

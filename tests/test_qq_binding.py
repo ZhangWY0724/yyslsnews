@@ -1,8 +1,13 @@
 from datetime import datetime, timedelta, timezone
 
-from yysls_news.delivery.qqbot.gateway import _extract_binding_event
+import pytest
+
+from yysls_news.delivery.qqbot import gateway as gateway_module
+from yysls_news.delivery.qqbot.client import QQMessageResult
+from yysls_news.delivery.qqbot.gateway import QQBotGatewayListener, _extract_binding_event
 from yysls_news.domain.models import MessageMode, SceneType
 from yysls_news.services.qq_binding import BINDING_CODE_TTL_SECONDS, QQBindingService
+from yysls_news.services.runtime_config import QQBotConfig
 from yysls_news.storage.database import Database
 from yysls_news.storage.repositories import DeliveryTargetRepository, QQBindingRepository
 
@@ -68,3 +73,38 @@ def test_gateway_extracts_user_and_group_openid() -> None:
 
     assert user_event == (SceneType.USER, "ABCD2345", "user-openid")
     assert group_event == (SceneType.GROUP, "ABCD2345", "group-openid")
+
+
+@pytest.mark.asyncio
+async def test_gateway_binding_confirmation_replies_to_group_message(tmp_path, monkeypatch) -> None:
+    _, service = _service(tmp_path)
+    binding = service.create(SceneType.GROUP)
+    sent: list[tuple[str, str, str]] = []
+
+    class FakeQQBotClient:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        async def send_text(self, target, content, *, msg_id="") -> QQMessageResult:
+            sent.append((target.scene, target.openid, msg_id))
+            return QQMessageResult(message_id="confirm-message", timestamp="now")
+
+        async def aclose(self) -> None:
+            pass
+
+    monkeypatch.setattr(gateway_module, "QQBotClient", FakeQQBotClient)
+    listener = QQBotGatewayListener(runtime_config=None, bindings=service)
+    await listener._handle_dispatch(
+        {
+            "t": "GROUP_AT_MESSAGE_CREATE",
+            "d": {
+                "id": "incoming-message",
+                "content": binding.code,
+                "group_openid": "group-openid",
+                "group_name": "测试群聊",
+            },
+        },
+        QQBotConfig("https://api.bot.qq.com", "app-id", "app-secret"),
+    )
+
+    assert sent == [("group", "group-openid", "incoming-message")]

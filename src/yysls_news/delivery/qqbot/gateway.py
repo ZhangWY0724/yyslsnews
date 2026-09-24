@@ -81,13 +81,18 @@ class QQBotGatewayListener:
                 continue
 
             try:
+                LOGGER.info("QQ Gateway 连接开始")
                 await self._run_connection(config, stop_event)
                 backoff_seconds = 5.0
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
                 self._set_status("error", f"QQ Gateway 连接失败: {type(exc).__name__}")
-                LOGGER.warning("QQ Gateway 连接失败: %s", type(exc).__name__)
+                LOGGER.warning(
+                    "QQ Gateway 连接失败: error=%s retry_in=%ss",
+                    type(exc).__name__,
+                    backoff_seconds,
+                )
                 await _wait_for_stop(stop_event, backoff_seconds)
                 backoff_seconds = min(backoff_seconds * 2, 60.0)
 
@@ -194,13 +199,14 @@ class QQBotGatewayListener:
         payload: dict[str, Any],
         config: QQBotConfig,
     ) -> None:
-        event = _extract_binding_event(str(payload.get("t") or ""), payload.get("d") or {})
+        event_name = str(payload.get("t") or "")
+        event_data = payload.get("d") or {}
+        event = _extract_binding_event(event_name, event_data)
         if event is None:
             return
         scene_type, code, target_openid = event
-        display_name = _extract_event_display_name(
-            str(payload.get("t") or ""), payload.get("d") or {}
-        )
+        display_name = _extract_event_display_name(event_name, event_data)
+        message_id = str(event_data.get("id") or "").strip()
         try:
             result = self.bindings.consume(
                 scene_type,
@@ -236,20 +242,36 @@ class QQBotGatewayListener:
                 result.scene_type.value,
                 display_name or "未获取名称",
             )
-            await client.send_text(
+            confirmation = await client.send_text(
                 QQTarget(result.scene_type.value, result.target_openid),
                 "绑定成功，后续资讯将推送到当前目标。",
+                msg_id=message_id,
             )
-        except (QQBotApiError, httpx.HTTPError) as exc:
-            LOGGER.warning("QQBot 绑定成功确认消息发送失败: %s", type(exc).__name__)
+            LOGGER.info(
+                "QQBot 绑定确认发送成功: scene=%s message_id_tail=%s",
+                result.scene_type.value,
+                confirmation.message_id[-8:] or "-",
+            )
+        except QQBotApiError as exc:
+            LOGGER.warning(
+                "QQBot 绑定成功确认消息发送失败: HTTP=%s err_code=%s trace_id=%s",
+                exc.http_status,
+                exc.err_code,
+                exc.trace_id or "-",
+            )
+        except httpx.HTTPError as exc:
+            LOGGER.warning("QQBot 绑定成功确认消息网络失败: %s", type(exc).__name__)
         finally:
             await client.aclose()
 
     def _set_status(self, value: str, error: str = "") -> None:
+        previous = self._status["status"]
         self._status["status"] = value
         self._status["last_error"] = error
         if value == "connected":
             self._status["connected_at"] = utc_now()
+        if previous != value:
+            LOGGER.info("QQ Gateway 状态变化: %s → %s", previous, value)
 
 
 def _extract_binding_event(

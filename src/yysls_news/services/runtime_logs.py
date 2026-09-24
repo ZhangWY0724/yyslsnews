@@ -1,16 +1,40 @@
 from __future__ import annotations
 
 import logging
+import re
 import threading
 from collections import deque
 from datetime import datetime, timezone
 from typing import Any
 
+_AUTH_RE = re.compile(
+    r"(?i)(\bAuthorization[\"']?\s*[:=]\s*[\"']?(?:(?:QQBot|Bearer)\s+)?)[^\s,;\"']+"
+)
+_SECRET_RE = re.compile(
+    r"(?i)(\b(?:access_token|app_secret|clientSecret|sessdata|bili_jct|"
+    r"dedeuserid|ac_time_value|buvid3|buvid4|app_encryption_key|"
+    r"presigned_url|cookie)\b[\"']?\s*[:=]\s*[\"']?)[^\s,;\"']+"
+)
+_URL_RE = re.compile(r"https?://[^\s'\"<>]+")
+
+
+def _redact_sensitive(message: str) -> str:
+    message = _URL_RE.sub(
+        lambda match: (
+            match.group(0).split("?", 1)[0] + "?[REDACTED]"
+            if "?" in match.group(0)
+            else match.group(0)
+        ),
+        message,
+    )
+    message = _AUTH_RE.sub(r"\1[REDACTED]", message)
+    return _SECRET_RE.sub(r"\1[REDACTED]", message)
+
 
 class RuntimeLogBuffer:
     """保存当前进程最近的日志，供管理页面实时查看。"""
 
-    def __init__(self, max_entries: int = 500) -> None:
+    def __init__(self, max_entries: int = 5000) -> None:
         self._entries: deque[dict[str, Any]] = deque(maxlen=max(1, max_entries))
         self._lock = threading.Lock()
         self._next_id = 1
@@ -19,6 +43,7 @@ class RuntimeLogBuffer:
         message = record.getMessage()
         if record.exc_info:
             message = f"{message}\n{self._format_exception(record)}"
+        message = _redact_sensitive(message)
         with self._lock:
             entry = {
                 "id": self._next_id,
@@ -35,7 +60,7 @@ class RuntimeLogBuffer:
     def read(self, after_id: int = 0, limit: int = 200) -> list[dict[str, Any]]:
         with self._lock:
             entries = [entry for entry in self._entries if int(entry["id"]) > after_id]
-        return entries[-max(1, limit) :]
+        return entries[: max(1, limit)]
 
     def latest_id(self) -> int:
         with self._lock:
@@ -54,6 +79,17 @@ class RuntimeLogHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
+            if not (
+                record.name == "yysls_news"
+                or record.name.startswith("yysls_news.")
+                or record.name == "uvicorn"
+                or record.name.startswith("uvicorn.")
+            ):
+                return
+            if record.name == "uvicorn.access" and re.search(
+                r'"(?:GET|HEAD) /(?:api/logs|health)(?:[? /])', record.getMessage()
+            ):
+                return
             seen_buffers = getattr(record, "_runtime_log_buffers", set())
             buffer_id = id(self.buffer)
             if buffer_id in seen_buffers:

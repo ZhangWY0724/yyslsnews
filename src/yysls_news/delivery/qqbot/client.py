@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -10,6 +11,7 @@ from typing import Any, Literal
 import httpx
 
 Scene = Literal["group", "user"]
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -84,8 +86,14 @@ class AccessTokenManager:
                 response.raise_for_status()
                 payload = response.json()
             except httpx.HTTPError as exc:
+                LOGGER.warning("QQBot AccessToken 请求失败: %s", type(exc).__name__)
                 raise QQBotApiError("获取 QQBot AccessToken 网络失败") from exc
             if not _is_zero(payload.get("code", 0)) or not payload.get("access_token"):
+                LOGGER.warning(
+                    "QQBot AccessToken 获取失败: HTTP=%s err_code=%s",
+                    response.status_code,
+                    payload.get("code"),
+                )
                 raise QQBotApiError(
                     str(payload.get("message") or "获取 QQBot AccessToken 失败"),
                     http_status=response.status_code,
@@ -94,6 +102,7 @@ class AccessTokenManager:
             self._token = str(payload["access_token"])
             expires_in = max(int(payload.get("expires_in", 7200)), 120)
             self._expires_at = time.monotonic() + expires_in - 60
+            LOGGER.info("QQBot AccessToken 刷新成功: expires_in=%ss", expires_in)
             return self._token
 
     def invalidate(self) -> None:
@@ -120,30 +129,62 @@ class QQBotClient:
         if self._owns_client:
             await self.client.aclose()
 
-    async def send_text(self, target: QQTarget, content: str) -> QQMessageResult:
+    async def send_text(
+        self, target: QQTarget, content: str, *, msg_id: str = ""
+    ) -> QQMessageResult:
+        LOGGER.info("QQBot 文本消息发送开始: scene=%s passive_reply=%s", target.scene, bool(msg_id))
+        request_payload: dict[str, Any] = {"msg_type": 0, "content": content}
+        if msg_id:
+            request_payload.update(msg_id=msg_id, msg_seq=1)
         payload = await self._request(
             "POST",
             self._message_path(target),
-            json={"msg_type": 0, "content": content},
+            json=request_payload,
         )
-        return self._message_result(payload)
+        result = self._message_result(payload)
+        LOGGER.info(
+            "QQBot 文本消息发送成功: scene=%s message_id_tail=%s trace_id=%s",
+            target.scene,
+            result.message_id[-8:] or "-",
+            result.trace_id or "-",
+        )
+        return result
 
     async def send_markdown(self, target: QQTarget, content: str) -> QQMessageResult:
+        LOGGER.info("QQBot Markdown 消息发送开始: scene=%s", target.scene)
         payload = await self._request(
             "POST",
             self._message_path(target),
             json={"msg_type": 2, "markdown": {"content": content}},
         )
-        return self._message_result(payload)
+        result = self._message_result(payload)
+        LOGGER.info(
+            "QQBot Markdown 消息发送成功: scene=%s message_id_tail=%s trace_id=%s",
+            target.scene,
+            result.message_id[-8:] or "-",
+            result.trace_id or "-",
+        )
+        return result
 
     async def send_image(self, target: QQTarget, file_path: str | Path) -> QQMessageResult:
         file_info = await self.upload_image(target, file_path)
+        return await self.send_uploaded_image(target, file_info)
+
+    async def send_uploaded_image(self, target: QQTarget, file_info: str) -> QQMessageResult:
+        LOGGER.info("QQBot 图片消息发送开始: scene=%s", target.scene)
         payload = await self._request(
             "POST",
             self._message_path(target),
             json={"msg_type": 7, "media": {"file_info": file_info}},
         )
-        return self._message_result(payload)
+        result = self._message_result(payload)
+        LOGGER.info(
+            "QQBot 图片消息发送成功: scene=%s message_id_tail=%s trace_id=%s",
+            target.scene,
+            result.message_id[-8:] or "-",
+            result.trace_id or "-",
+        )
+        return result
 
     async def get_group_info(self, group_openid: str) -> dict[str, Any]:
         return await self._request("GET", f"/v2/groups/{group_openid}/info")
@@ -157,6 +198,8 @@ class QQBotClient:
 
         raw = path.read_bytes()
         file_size = len(raw)
+        started = time.monotonic()
+        LOGGER.info("QQBot 图片上传开始: scene=%s bytes=%s", target.scene, file_size)
         prepare = await self._request(
             "POST",
             f"/v2/{target.resource}/{target.openid}/upload_prepare",
@@ -174,6 +217,12 @@ class QQBotClient:
         parts = prepare.get("parts") or []
         if not upload_id or block_size <= 0 or not isinstance(parts, list):
             raise QQBotApiError("QQBot 预上传响应缺少分片信息")
+        LOGGER.info(
+            "QQBot 图片预上传完成: scene=%s parts=%s block_size=%s",
+            target.scene,
+            len(parts),
+            block_size,
+        )
 
         for part in parts:
             index = int(part.get("index", 0))
@@ -187,10 +236,22 @@ class QQBotClient:
             presigned_url = str(part.get("presigned_url") or "")
             if not presigned_url:
                 raise QQBotApiError(f"QQBot 分片 {index} 缺少预签名 URL")
+            LOGGER.info(
+                "QQBot 图片分片上传开始: scene=%s part_index=%s bytes=%s",
+                target.scene,
+                index,
+                len(chunk),
+            )
             try:
                 response = await self.client.put(presigned_url, content=chunk)
                 response.raise_for_status()
             except httpx.HTTPError as exc:
+                LOGGER.warning(
+                    "QQBot 图片分片 PUT 失败: scene=%s part_index=%s HTTP=%s",
+                    target.scene,
+                    index,
+                    getattr(getattr(exc, "response", None), "status_code", None),
+                )
                 raise QQBotApiError(f"QQBot 分片 {index} 上传失败") from exc
             await self._request(
                 "POST",
@@ -202,6 +263,11 @@ class QQBotClient:
                     "md5": hashlib.md5(chunk).hexdigest(),
                 },
             )
+            LOGGER.info(
+                "QQBot 图片分片确认完成: scene=%s part_index=%s",
+                target.scene,
+                index,
+            )
 
         completed = await self._request(
             "POST",
@@ -211,6 +277,13 @@ class QQBotClient:
         file_info = str(completed.get("file_info") or "")
         if not file_info:
             raise QQBotApiError("QQBot 图片上传响应缺少 file_info")
+        LOGGER.info(
+            "QQBot 图片上传完成: scene=%s bytes=%s parts=%s duration_ms=%s",
+            target.scene,
+            file_size,
+            len(parts),
+            int((time.monotonic() - started) * 1000),
+        )
         return file_info
 
     async def _request(
@@ -231,9 +304,18 @@ class QQBotClient:
             )
             payload = response.json() if response.content else {}
         except (httpx.HTTPError, ValueError) as exc:
+            LOGGER.warning(
+                "QQBot API 请求异常: endpoint=%s error=%s",
+                path.rsplit("/", 1)[-1],
+                type(exc).__name__,
+            )
             raise QQBotApiError("QQBot API 请求失败") from exc
 
         if response.status_code == 401 and retry_auth:
+            LOGGER.info(
+                "QQBot API 返回 401，刷新 AccessToken 后重试: endpoint=%s",
+                path.rsplit("/", 1)[-1],
+            )
             self.tokens.invalidate()
             return await self._request(method, path, json=json, retry_auth=False)
 
@@ -241,6 +323,14 @@ class QQBotClient:
         if err_code is None:
             err_code = payload.get("code")
         if response.status_code >= 400 or (err_code is not None and not _is_zero(err_code)):
+            trace_id = str(payload.get("trace_id") or response.headers.get("X-Tps-trace-ID", ""))
+            LOGGER.warning(
+                "QQBot API 返回失败: endpoint=%s HTTP=%s err_code=%s trace_id=%s",
+                path.rsplit("/", 1)[-1],
+                response.status_code,
+                err_code,
+                trace_id or "-",
+            )
             message = str(
                 payload.get("message")
                 or payload.get("msg")
@@ -252,7 +342,7 @@ class QQBotClient:
                 message,
                 http_status=response.status_code,
                 err_code=err_code,
-                trace_id=str(payload.get("trace_id") or response.headers.get("X-Tps-trace-ID", "")),
+                trace_id=trace_id,
             )
         return payload
 

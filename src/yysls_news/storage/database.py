@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS watch_sources (
     next_poll_at TEXT,
     last_success_at TEXT,
     last_error TEXT NOT NULL DEFAULT '',
+    deleted_at TEXT,
     UNIQUE(source_type, source_key)
 );
 
@@ -86,6 +87,7 @@ CREATE TABLE IF NOT EXISTS delivery_targets (
     message_mode TEXT NOT NULL DEFAULT 'image',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
+    deleted_at TEXT,
     UNIQUE(scene_type, target_openid)
 );
 
@@ -111,12 +113,22 @@ CREATE TABLE IF NOT EXISTS delivery_tasks (
     status TEXT NOT NULL DEFAULT 'pending',
     retry_count INTEGER NOT NULL DEFAULT 0,
     next_retry_at TEXT,
+    processing_started_at TEXT,
     qq_message_id TEXT NOT NULL DEFAULT '',
     qq_trace_id TEXT NOT NULL DEFAULT '',
     last_error TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
     sent_at TEXT,
     UNIQUE(content_item_id, delivery_target_id)
+);
+
+CREATE TABLE IF NOT EXISTS render_artifacts (
+    content_item_id INTEGER PRIMARY KEY REFERENCES content_items(id) ON DELETE CASCADE,
+    version INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    pages_json TEXT NOT NULL DEFAULT '[]',
+    last_error TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS push_history (
@@ -156,7 +168,10 @@ class Database:
         with self.connect() as connection:
             connection.executescript(SCHEMA)
             self._migrate_delivery_target_name(connection)
+            self._migrate_delivery_target_deleted_at(connection)
+            self._migrate_watch_source_deleted_at(connection)
             self._migrate_content_render_fields(connection)
+            self._migrate_delivery_task_processing(connection)
             self._remove_unused_schema(connection)
 
     @staticmethod
@@ -171,6 +186,24 @@ class Database:
             )
 
     @staticmethod
+    def _migrate_delivery_target_deleted_at(connection: sqlite3.Connection) -> None:
+        columns = {
+            str(row["name"])
+            for row in connection.execute("PRAGMA table_info(delivery_targets)").fetchall()
+        }
+        if "deleted_at" not in columns:
+            connection.execute("ALTER TABLE delivery_targets ADD COLUMN deleted_at TEXT")
+
+    @staticmethod
+    def _migrate_watch_source_deleted_at(connection: sqlite3.Connection) -> None:
+        columns = {
+            str(row["name"])
+            for row in connection.execute("PRAGMA table_info(watch_sources)").fetchall()
+        }
+        if "deleted_at" not in columns:
+            connection.execute("ALTER TABLE watch_sources ADD COLUMN deleted_at TEXT")
+
+    @staticmethod
     def _migrate_content_render_fields(connection: sqlite3.Connection) -> None:
         columns = {
             str(row["name"])
@@ -181,6 +214,17 @@ class Database:
                 connection.execute(
                     f"ALTER TABLE content_items ADD COLUMN {name} TEXT NOT NULL DEFAULT ''"
                 )
+
+    @staticmethod
+    def _migrate_delivery_task_processing(connection: sqlite3.Connection) -> None:
+        columns = {
+            str(row["name"])
+            for row in connection.execute("PRAGMA table_info(delivery_tasks)").fetchall()
+        }
+        if "processing_started_at" not in columns:
+            connection.execute(
+                "ALTER TABLE delivery_tasks ADD COLUMN processing_started_at TEXT"
+            )
 
     @staticmethod
     def _remove_unused_schema(connection: sqlite3.Connection) -> None:

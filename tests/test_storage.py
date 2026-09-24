@@ -42,6 +42,27 @@ def test_content_and_outbox_are_inserted_once(tmp_path) -> None:
     assert DeliveryTaskRepository(database).count_by_status() == {"pending": 1}
 
 
+def test_stale_processing_task_can_be_reclaimed(tmp_path) -> None:
+    database = Database(tmp_path / "processing.db")
+    database.initialize()
+    DeliveryTargetRepository(database).upsert(SceneType.GROUP, "group-openid")
+    ContentRepository(database).insert_with_outbox(_content())
+    tasks = DeliveryTaskRepository(database)
+    task_id = int(tasks.list_pending()[0]["id"])
+
+    assert tasks.mark_processing(task_id)
+    assert tasks.list_pending() == []
+    with database.connect() as connection:
+        connection.execute(
+            "UPDATE delivery_tasks SET processing_started_at = ? WHERE id = ?",
+            ("2000-01-01T00:00:00+00:00", task_id),
+        )
+
+    assert [task["id"] for task in tasks.list_pending()] == [task_id]
+    assert tasks.mark_processing(task_id)
+    assert tasks.list_pending() == []
+
+
 def test_existing_delivery_targets_get_display_name_column(tmp_path) -> None:
     path = tmp_path / "legacy.db"
     with sqlite3.connect(path) as connection:
@@ -70,6 +91,26 @@ def test_existing_delivery_targets_get_display_name_column(tmp_path) -> None:
             for row in connection.execute("PRAGMA table_info(delivery_targets)").fetchall()
         }
     assert "display_name" in columns
+
+
+def test_existing_delivery_tasks_get_processing_lease_column(tmp_path) -> None:
+    database = Database(tmp_path / "legacy-processing.db")
+    database.initialize()
+    with database.connect() as connection:
+        connection.execute("ALTER TABLE delivery_tasks DROP COLUMN processing_started_at")
+
+    database.initialize()
+
+    with database.connect() as connection:
+        columns = {
+            str(row["name"])
+            for row in connection.execute("PRAGMA table_info(delivery_tasks)")
+        }
+        artifacts = connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'render_artifacts'"
+        ).fetchone()
+    assert "processing_started_at" in columns
+    assert artifacts is not None
 
 
 def test_push_history_records_success_and_failure(tmp_path) -> None:
