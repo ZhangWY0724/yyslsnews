@@ -450,7 +450,8 @@ class ContentRepository:
         with self.database.connect() as connection:
             row = connection.execute(
                 """SELECT id, source_type, source_key, external_id, title, author,
-                          category, source_url, published_at, created_at
+                          category, source_url, published_at, body_text,
+                          video_cover_url, video_url, created_at
                    FROM content_items WHERE id = ?""",
                 (content_id,),
             ).fetchone()
@@ -472,8 +473,9 @@ class ContentRepository:
                     """
                     INSERT OR IGNORE INTO content_items(
                         source_type, source_key, external_id, title, author, category,
-                        source_url, published_at, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        source_url, published_at, body_text, video_cover_url,
+                        video_url, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         content.source_type.value,
@@ -484,6 +486,9 @@ class ContentRepository:
                         content.category,
                         content.source_url,
                         published_at,
+                        content.body_text,
+                        content.video_cover_url,
+                        content.video_url,
                         created_at,
                     ),
                 )
@@ -556,7 +561,9 @@ class DeliveryTaskRepository:
                 """
                 SELECT task.*, content_items.source_type, content_items.source_key,
                        content_items.external_id, content_items.title,
-                       content_items.source_url,
+                       content_items.source_url, content_items.author,
+                       content_items.category, content_items.body_text,
+                       content_items.video_cover_url, content_items.video_url,
                        delivery_targets.scene_type, delivery_targets.target_openid,
                        delivery_targets.display_name AS target_display_name,
                        delivery_targets.message_mode

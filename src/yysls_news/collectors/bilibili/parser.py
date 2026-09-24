@@ -227,6 +227,16 @@ def parse_dynamic(item: dict[str, Any], uid: int) -> BiliDynamicViewModel | None
         if dynamic_type == "DYNAMIC_TYPE_ARTICLE"
         else f"https://t.bilibili.com/{dynamic_id}"
     )
+    archive = _value(major, "archive", default={})
+    video_bvid = (
+        _clean_text(_value(archive, "bvid"))
+        if dynamic_type == "DYNAMIC_TYPE_AV"
+        else ""
+    )
+    video_cover_url = (
+        _clean_text(_value(archive, "cover")) if dynamic_type == "DYNAMIC_TYPE_AV" else ""
+    )
+    video_url = f"https://www.bilibili.com/video/{video_bvid}" if video_bvid else ""
 
     if dynamic_type == "DYNAMIC_TYPE_FORWARD":
         original = item.get("orig")
@@ -249,6 +259,9 @@ def parse_dynamic(item: dict[str, Any], uid: int) -> BiliDynamicViewModel | None
         title=parts.title,
         content=parts.content,
         source_url=source_url,
+        video_bvid=video_bvid,
+        video_cover_url=video_cover_url,
+        video_url=video_url,
     )
 
 
@@ -272,4 +285,7 @@ def to_normalized_content(model: BiliDynamicViewModel) -> NormalizedContent:
         category=TYPE_NAMES.get(model.dynamic_type, "动态"),
         source_url=model.source_url,
         published_at=model.publish_time,
+        body_text=model.content if model.dynamic_type == "DYNAMIC_TYPE_AV" else "",
+        video_cover_url=model.video_cover_url,
+        video_url=model.video_url,
     )

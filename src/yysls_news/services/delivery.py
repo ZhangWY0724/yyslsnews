@@ -176,7 +176,19 @@ class DeliveryWorker:
         try:
             source_url = str(task.get("source_url") or "")
             if source_type == SourceType.BILIBILI.value:
-                image_path = await self.image_renderer.render_bilibili(source_url, image_path)
+                if str(task.get("category") or "") == "视频":
+                    image_path = await self.image_renderer.render_bilibili_video(
+                        title=str(task.get("title") or ""),
+                        author=str(task.get("author") or ""),
+                        body_text=str(task.get("body_text") or ""),
+                        cover_url=str(task.get("video_cover_url") or ""),
+                        video_url=str(task.get("video_url") or source_url),
+                        output_path=image_path,
+                    )
+                else:
+                    image_path = await self.image_renderer.render_bilibili(
+                        source_url, image_path
+                    )
             else:
                 image_path = await self.image_renderer.render_yysls(source_url, image_path)
             return await client.send_image(target, image_path)

@@ -39,6 +39,9 @@ class BiliDynamicViewModel:
     title: str = ""
     content: str = ""
     source_url: str = ""
+    video_bvid: str = ""
+    video_cover_url: str = ""
+    video_url: str = ""
 
 
 @dataclass(frozen=True)
@@ -51,6 +54,9 @@ class NormalizedContent:
     category: str
     source_url: str
     published_at: datetime | None
+    body_text: str = ""
+    video_cover_url: str = ""
+    video_url: str = ""
 
 
 @dataclass(frozen=True)

@@ -70,6 +70,9 @@ CREATE TABLE IF NOT EXISTS content_items (
     category TEXT NOT NULL DEFAULT '',
     source_url TEXT NOT NULL DEFAULT '',
     published_at TEXT,
+    body_text TEXT NOT NULL DEFAULT '',
+    video_cover_url TEXT NOT NULL DEFAULT '',
+    video_url TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
     UNIQUE(source_type, source_key, external_id)
 );
@@ -153,6 +156,7 @@ class Database:
         with self.connect() as connection:
             connection.executescript(SCHEMA)
             self._migrate_delivery_target_name(connection)
+            self._migrate_content_render_fields(connection)
             self._remove_unused_schema(connection)
 
     @staticmethod
@@ -165,6 +169,18 @@ class Database:
             connection.execute(
                 "ALTER TABLE delivery_targets ADD COLUMN display_name TEXT NOT NULL DEFAULT ''"
             )
+
+    @staticmethod
+    def _migrate_content_render_fields(connection: sqlite3.Connection) -> None:
+        columns = {
+            str(row["name"])
+            for row in connection.execute("PRAGMA table_info(content_items)").fetchall()
+        }
+        for name in ("body_text", "video_cover_url", "video_url"):
+            if name not in columns:
+                connection.execute(
+                    f"ALTER TABLE content_items ADD COLUMN {name} TEXT NOT NULL DEFAULT ''"
+                )
 
     @staticmethod
     def _remove_unused_schema(connection: sqlite3.Connection) -> None:

@@ -1,10 +1,25 @@
 from __future__ import annotations
 
+import base64
+import io
 import logging
+import time
+from importlib.resources import files
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
+
+from jinja2 import Environment
+from PIL import Image
 
 LOGGER = logging.getLogger(__name__)
+
+VIDEO_CARD_TEMPLATE = (
+    files(__package__).joinpath("templates", "bilibili_video.html").read_text(
+        encoding="utf-8"
+    )
+)
+VIDEO_CARD_ENVIRONMENT = Environment(autoescape=True)
 
 
 class ImageRenderError(RuntimeError):
@@ -12,7 +27,7 @@ class ImageRenderError(RuntimeError):
 
 
 class PlaywrightRenderer:
-    """按需打开详情页，截取 B站动态或官网新闻正文。"""
+    """渲染 B站视频卡片、动态正文和官网新闻正文。"""
 
     def __init__(self, timeout_ms: int = 20_000) -> None:
         self.timeout_ms = timeout_ms
@@ -30,6 +45,102 @@ class PlaywrightRenderer:
             hide_css=".bili-header__menu, .login-tip { display: none !important; }",
             require_images=True,
         )
+
+    async def render_bilibili_video(
+        self,
+        title: str,
+        author: str,
+        body_text: str,
+        cover_url: str,
+        video_url: str,
+        output_path: str | Path,
+    ) -> Path:
+        """用结构化动态数据生成视频投稿卡片，不打开视频播放页。"""
+        output = Path(output_path).with_suffix(".jpg")
+        output.parent.mkdir(parents=True, exist_ok=True)
+        safe_cover_url = _bilibili_cover_url(cover_url)
+        safe_video_url = video_url.strip()
+        qrcode_url = _video_qrcode_data_url(safe_video_url)
+        html = VIDEO_CARD_ENVIRONMENT.from_string(VIDEO_CARD_TEMPLATE).render(
+            title=title.strip() or "投稿了新视频",
+            author=author.strip() or "未知 UP 主",
+            body_text=body_text.strip(),
+            cover_url=safe_cover_url,
+            video_url=safe_video_url,
+            qrcode_url=qrcode_url,
+        )
+        started = time.monotonic()
+        LOGGER.info(
+            "B站视频卡片渲染开始: selector=.bilibili-video-card viewport=1920x1080 output=%s",
+            output.name,
+        )
+        try:
+            from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+            from playwright.async_api import async_playwright
+        except ImportError as exc:
+            raise ImageRenderError("未安装 Playwright") from exc
+
+        try:
+            async with async_playwright() as playwright:
+                browser = await playwright.chromium.launch(headless=True)
+                try:
+                    page = await browser.new_page(
+                        viewport={"width": 1920, "height": 1080},
+                        device_scale_factor=1,
+                        extra_http_headers={"Referer": "https://www.bilibili.com/"},
+                    )
+                    await page.set_content(
+                        html,
+                        wait_until="domcontentloaded",
+                        timeout=max(self.timeout_ms, 30_000),
+                    )
+                    card = page.locator(".bilibili-video-card").first
+                    await card.wait_for(state="visible", timeout=self.timeout_ms)
+                    if safe_cover_url:
+                        await page.wait_for_function(
+                            """() => {
+                                const image = document.querySelector('.video-cover img');
+                                return image && image.complete && image.naturalWidth > 0;
+                            }""",
+                            timeout=self.timeout_ms,
+                        )
+                    await page.evaluate("() => document.fonts.ready")
+                    await card.screenshot(
+                        path=str(output),
+                        type="jpeg",
+                        quality=88,
+                        animations="disabled",
+                        timeout=120_000,
+                    )
+                finally:
+                    await browser.close()
+        except ImageRenderError:
+            raise
+        except Exception as exc:
+            error = (
+                "视频封面加载超时"
+                if isinstance(exc, PlaywrightTimeoutError) and safe_cover_url
+                else f"视频卡片截图失败: {type(exc).__name__}: {str(exc)[:180]}"
+            )
+            LOGGER.warning(
+                "B站视频卡片渲染失败: error=%s duration_ms=%s",
+                error[:120],
+                int((time.monotonic() - started) * 1000),
+            )
+            raise ImageRenderError(error) from exc
+
+        if not output.is_file() or output.stat().st_size == 0:
+            raise ImageRenderError("B站视频卡片未生成有效图片")
+        with Image.open(output) as screenshot:
+            width, height = screenshot.size
+        LOGGER.info(
+            "B站视频卡片渲染完成: size=%sx%s bytes=%s duration_ms=%s",
+            width,
+            height,
+            output.stat().st_size,
+            int((time.monotonic() - started) * 1000),
+        )
+        return output
 
     async def render_yysls(
         self, source_url: str, output_path: str | Path
@@ -133,3 +244,43 @@ class PlaywrightRenderer:
         for y in range(start, end, 700):
             await page.evaluate("y => window.scrollTo(0, y)", y)
             await page.wait_for_timeout(80)
+
+
+def _bilibili_cover_url(value: str) -> str:
+    candidate = value.strip()
+    if candidate.startswith("//"):
+        candidate = f"https:{candidate}"
+    try:
+        parsed = urlsplit(candidate)
+    except ValueError:
+        return ""
+    hostname = (parsed.hostname or "").lower()
+    allowed_domains = ("hdslb.com", "bilivideo.com", "biliimg.com")
+    if (
+        parsed.scheme.lower() not in {"http", "https"}
+        or not hostname
+        or not any(
+            hostname == domain or hostname.endswith(f".{domain}")
+            for domain in allowed_domains
+        )
+    ):
+        return ""
+    return urlunsplit(
+        ("https", parsed.netloc, parsed.path, parsed.query, parsed.fragment)
+    )
+
+
+def _video_qrcode_data_url(video_url: str) -> str:
+    if not video_url:
+        return ""
+    try:
+        import qrcode
+
+        image = qrcode.make(video_url)
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+    except Exception as exc:
+        LOGGER.warning("B站视频二维码生成失败: error=%s", type(exc).__name__)
+        return ""
+    encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+    return f"data:image/png;base64,{encoded}"

@@ -14,6 +14,7 @@ dependencies = [
     "fastapi>=0.115,<1",
     "httpx[socks]>=0.27,<1",
     "jinja2>=3.1,<4",
+    "pillow>=10,<13",
     "playwright>=1.50,<2",
     "python-dotenv>=1.0,<2",
     "qrcode[pil]>=8,<9",
@@ -35,7 +36,7 @@ yysls-news = "yysls_news.main:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-yysls_news = ["web/templates/*.html"]
+yysls_news = ["web/templates/*.html", "rendering/templates/*.html"]
 
 [tool.pytest.ini_options]
 addopts = "-q"
